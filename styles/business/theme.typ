@@ -299,15 +299,98 @@
   }
 })
 
+// 판권면. meta.imprint(사전)가 있으면 발행처 프로필 블록을 함께 싣는다.
+//   imprint: (name, role, tagline, credentials[], books[], stats[(num,label)],
+//             phone, email, site, note)
+// 전부 선택 항목이며, 없으면 종전과 같이 한 줄 판권 표기만 남는다.
 #let colophon(meta, t) = {
   pagebreak(weak: true)
-  page(header: none, footer: none, background: none, {  // 판권면: 러닝·섹션 탭 생략
-    set text(size: 8pt, fill: ink-60)
-    set par(first-line-indent: 0em)
+  page(header: none, footer: none, background: none, {
+    set par(first-line-indent: 0em, leading: 0.62em)
     v(1fr)
+
+    let im = meta.at("imprint", default: none)
+    if im != none {
+      block(width: 100%, inset: (x: 8mm, y: 7mm), radius: 3pt, fill: paper-alt, {
+        // 발행처 라벨
+        text(font: TT.sans-font, size: 8pt, weight: "bold", tracking: 0.06em,
+          fill: navy-700, upper(im.at("label", default: "PUBLISHED BY")))
+        v(3mm)
+        // 이름 · 직함
+        text(font: TT.sans-font, size: 15pt, weight: "extrabold",
+          tracking: -0.02em, fill: navy-900, im.at("name", default: ""))
+        if im.at("role", default: none) != none {
+          h(2mm)
+          text(font: TT.sans-font, size: 9.5pt, fill: ink-60, im.role)
+        }
+        if im.at("tagline", default: none) != none {
+          v(2mm)
+          text(font: TT.sans-font, size: 9pt, fill: ink, im.tagline)
+        }
+
+        // 지표 가로 배치
+        let st = im.at("stats", default: ())
+        if st.len() > 0 {
+          v(4mm)
+          grid(columns: st.len(), column-gutter: 6mm, ..st.map(it => {
+            text(font: TT.sans-font, size: 12pt, weight: "bold",
+              fill: navy-700, it.at(0))
+            linebreak()
+            text(font: TT.sans-font, size: 7.5pt, fill: ink-60, it.at(1))
+          }))
+        }
+
+        // 자격 · 저서
+        let cr = im.at("credentials", default: ())
+        if cr.len() > 0 {
+          v(4mm)
+          text(font: TT.sans-font, size: 8pt, fill: ink-60, cr.join(" · "))
+        }
+        let bk = im.at("books", default: ())
+        if bk.len() > 0 {
+          v(1.5mm)
+          text(font: TT.sans-font, size: 8pt, fill: ink-60,
+            "저서 " + bk.map(x => "「" + x + "」").join(" · "))
+        }
+
+        // 연락처
+        v(4mm)
+        line(length: 100%, stroke: 0.4pt + rule-c)
+        v(3mm)
+        let rows = ()
+        if im.at("phone", default: none) != none { rows.push(("전화", im.phone)) }
+        if im.at("email", default: none) != none { rows.push(("이메일", im.email)) }
+        if im.at("site", default: none) != none { rows.push(("홈페이지", im.site)) }
+        grid(columns: rows.len(), column-gutter: 8mm, ..rows.map(r => {
+          text(font: TT.sans-font, size: 7.5pt, tracking: 0.06em, fill: ink-60, r.at(0))
+          linebreak()
+          text(font: TT.sans-font, size: 9.5pt, weight: "semibold", fill: navy-900, r.at(1))
+        }))
+        if im.at("note", default: none) != none {
+          v(3mm)
+          text(font: TT.sans-font, size: 7.5pt, fill: ink-60, im.note)
+        }
+      })
+      v(5mm)
+    }
+
+    set text(size: 8pt, fill: ink-60)
+    // 면책: meta.disclaimer 가 있으면 판권 위에 싣는다(장 본문에서 뺄 수 있게)
+    let dc = meta.at("disclaimer", default: none)
+    if dc != none {
+      block(width: 100%, inset: (x: 8mm, y: 5mm), radius: 3pt,
+        stroke: 0.5pt + navy-100, {
+        text(font: TT.sans-font, size: 8pt, weight: "bold", tracking: 0.06em,
+          fill: navy-700, "면책")
+        v(2mm)
+        set par(justify: true, leading: 0.6em)
+        text(font: TT.sans-font, size: 8pt, fill: ink-60, dc)
+      })
+      v(5mm)
+    }
     line(length: 40%, stroke: 0.4pt + rule-c)
     v(4pt)
-    [#meta.title · #meta.at("author", default: "bookforge") · #meta.at("date", default: "") 발행 · bookforge로 조판]
+    [#meta.title · #meta.at("author", default: "") · #meta.at("date", default: "") 발행]
     linebreak()
     [본 보고서의 수치·인용은 본문 표기 출처를 따르며, 무단 전재를 금합니다.]
   })
