@@ -911,8 +911,20 @@ def main():
         for p in g14[axis]["problems"]:
             fails.append(f"G14-{axis}: {p}")
     report["warns"] += g14["D"].get("warns", []) + g14["E"].get("warns", [])
+    # ---- 판권면 식별 ----
+    # 판권면은 **발행 위치가 계약**이다: typst 트랙은 build.py가 main.typ 끝에
+    # `#colophon(meta, TT)`를 붙이고, html 트랙은 theme.html의 `<section class="colophon">`이
+    # 문서 마지막에 온다 — 6스타일 전부 본문 뒤 마지막 면이다.
+    # 종전엔 "bookforge"+"조판" 문구로 찾았으나 그 자기표기는 스타일이 뺄 수 있는 선택 사항이고
+    # (상업 배포물 판권면에 조판 도구명을 넣지 않는 편집 판단이 실재한다), 문구가 사라지면
+    # 판권면이 본문 면으로 오인돼 `body_last`가 판권면을 가리키고 **진짜 마지막 본문 면이
+    # 구조 면제를 잃어** G7-MID가 오검출된다(실측: business imprint 개편본 저자 소개 면 HARD FAIL).
+    # 그래서 문구가 아니라 위치로 잡는다. 문구 매칭은 다면 판권면(앞면에만 표기가 실리는 경우)을
+    # 위한 확장 신호로만 남긴다 — 코퍼스 10권에서 문구 매칭 결과는 전건 {마지막 면}과 일치했다.
     colophon_pages = {i + 1 for i, t in enumerate(page_texts)
                       if "bookforge" in t and "조판" in t and i + 1 >= (ch_starts[-1] if ch_starts else 1)}
+    if n > first_ch:
+        colophon_pages.add(n)
     fullbleed = {p["page"] for p in pages
                  if p["imgarea"] >= 0.60 or p.get("vecarea", 0) >= 0.60}
     # float 밀림 면제(구조 파생): 다음 면 첫 블록(통짜 표·그림)이 이 면 잔여 공간보다 크면
