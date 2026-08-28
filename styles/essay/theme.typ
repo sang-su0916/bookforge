@@ -142,16 +142,16 @@
     linebreak()
     [초판 1쇄 발행 #meta.at("date", default: "")]
     linebreak()
-    [지은이 #meta.at("author", default: "bookforge") · 펴낸곳 bookforge]
+    [지은이 #meta.at("author", default: "엘비즈파트너스") · 펴낸곳 #meta.at("publisher", default: "엘비즈파트너스")]
     linebreak()
-    [조판 bookforge · 본문 Noto Serif KR · 표지·라벨 Pretendard]
+    [본문 Noto Serif KR · 표지·라벨 Pretendard]
   })
 }
 
 // ---- 마스터 래퍼 (base.book 대체 — 에세이 전용 지면 규칙) ---------------------
 #let book(meta: (:), tokens: (:), cover: none, toc: true, toc-title: "차례", body) = {
   let t = TT
-  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "bookforge"))
+  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "엘비즈파트너스"))
   set page(
     width: t.trim.w, height: t.trim.h,
     margin: (top: t.margin.top, bottom: t.margin.bottom, left: t.margin.left, right: t.margin.right),

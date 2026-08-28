@@ -1,6 +1,6 @@
 ---
-name: bookforge
-description: Generate commercial-book-quality Korean ebook PDFs from a topic or a finished manuscript. Six design styles (practical, insight, academic, essay, business, magazine) with real book anatomy — cover, TOC with page numbers, chapter openers, running heads, QC gates. Use when the user wants an ebook, a PDF book or report, book typesetting, or mentions 전자책, PDF 책, 책 조판, 북포지, bookforge.
+name: lbiz-book
+description: Generate commercial-book-quality Korean ebook PDFs from a topic or a finished manuscript. Six design styles (practical, insight, academic, essay, business, magazine) with real book anatomy — cover, TOC with page numbers, chapter openers, running heads, QC gates. Use when the user wants an ebook, a PDF book or report, book typesetting, or mentions 전자책, PDF 책, 책 조판, 엘비즈 책, lbiz-book, 북포지, bookforge.
 ---
 
 # bookforge — 상업도서급 전자책 PDF 공장

@@ -92,7 +92,7 @@
     }))
     place(bottom + left, dx: 20mm, dy: -18mm, {
       set text(size: 8pt, fill: navy-100, font: TT.sans-font)
-      [#meta.at("author", default: "bookforge") · #meta.at("date", default: "") · #meta.at("series_no", default: "REPORT 01")]
+      [#meta.at("author", default: "엘비즈파트너스") · #meta.at("date", default: "") · #meta.at("series_no", default: "REPORT 01")]
     })
   })
 }
@@ -399,7 +399,7 @@
 // ---- 마스터 래퍼 -------------------------------------------------------------
 #let book(meta: (:), tokens: (:), cover: none, toc: true, toc-title: "차례", body) = {
   let t = TT
-  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "bookforge"))
+  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "엘비즈파트너스"))
   set page(
     width: t.trim.w, height: t.trim.h,
     margin: (top: t.margin.top, bottom: t.margin.bottom, left: t.margin.left, right: t.margin.right),

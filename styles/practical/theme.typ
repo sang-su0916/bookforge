@@ -84,7 +84,7 @@
         rect(width: 12mm, height: 0.8pt, fill: c-brand)
         v(2.4mm, weak: true)
         text(size: 9pt, weight: "semibold", tracking: 0.14em,
-          upper(meta.at("publisher", default: meta.at("author", default: "bookforge"))))
+          upper(meta.at("publisher", default: meta.at("author", default: "엘비즈파트너스"))))
       })
     })
   })
@@ -107,7 +107,7 @@
   box(baseline: 0.12em, rect(width: 2.6mm, height: 2.6mm, fill: fg))
   h(2.2mm)
   text(size: 8.5pt, weight: "semibold", tracking: 0.18em, fill: fg,
-    upper(meta.at("publisher", default: meta.at("author", default: "bookforge"))))
+    upper(meta.at("publisher", default: meta.at("author", default: "엘비즈파트너스"))))
 }
 
 #let cover-author(meta, fg, size: 10pt) = if "author" in meta {
@@ -131,7 +131,7 @@
     place(top + left, dx: 17mm, dy: 18mm, {
       // 백색 88% — 22%였을 때 brand 위 실측 4.51:1로 하한 4.5에 밀착(여유 0.01), 5.4:1로 확보
       text(size: 8pt, weight: "semibold", tracking: 0.22em, fill: white.transparentize(12%),
-        upper(meta.at("publisher", default: "bookforge")) + " PRACTICAL")
+        upper(meta.at("publisher", default: "엘비즈파트너스")) + " PRACTICAL")
     })
     place(top + left, dx: 17mm, dy: 24.5mm, rect(width: 14mm, height: 1.1pt, fill: white))
     // 주제목 — 백색 좌정렬
@@ -450,7 +450,7 @@
           toc-cols: 1, body) = {
   let t = merged(tokens)
 
-  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "bookforge"))
+  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "엘비즈파트너스"))
   set page(
     width: t.trim.w, height: t.trim.h,
     margin: (top: t.margin.top, bottom: t.margin.bottom, left: t.margin.left, right: t.margin.right),
