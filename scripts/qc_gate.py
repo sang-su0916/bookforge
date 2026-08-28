@@ -911,8 +911,20 @@ def main():
         for p in g14[axis]["problems"]:
             fails.append(f"G14-{axis}: {p}")
     report["warns"] += g14["D"].get("warns", []) + g14["E"].get("warns", [])
+    # ---- 판권면 식별 ----
+    # 판권면은 **발행 위치가 계약**이다: typst 트랙은 build.py가 main.typ 끝에
+    # `#colophon(meta, TT)`를 붙이고, html 트랙은 theme.html의 `<section class="colophon">`이
+    # 문서 마지막에 온다 — 6스타일 전부 본문 뒤 마지막 면이다.
+    # 종전엔 "bookforge"+"조판" 문구로 찾았으나 그 자기표기는 스타일이 뺄 수 있는 선택 사항이고
+    # (상업 배포물 판권면에 조판 도구명을 넣지 않는 편집 판단이 실재한다), 문구가 사라지면
+    # 판권면이 본문 면으로 오인돼 `body_last`가 판권면을 가리키고 **진짜 마지막 본문 면이
+    # 구조 면제를 잃어** G7-MID가 오검출된다(실측: business imprint 개편본 저자 소개 면 HARD FAIL).
+    # 그래서 문구가 아니라 위치로 잡는다. 문구 매칭은 다면 판권면(앞면에만 표기가 실리는 경우)을
+    # 위한 확장 신호로만 남긴다 — 코퍼스 10권에서 문구 매칭 결과는 전건 {마지막 면}과 일치했다.
     colophon_pages = {i + 1 for i, t in enumerate(page_texts)
                       if "bookforge" in t and "조판" in t and i + 1 >= (ch_starts[-1] if ch_starts else 1)}
+    if n > first_ch:
+        colophon_pages.add(n)
     fullbleed = {p["page"] for p in pages
                  if p["imgarea"] >= 0.60 or p.get("vecarea", 0) >= 0.60}
     # float 밀림 면제(구조 파생): 다음 면 첫 블록(통짜 표·그림)이 이 면 잔여 공간보다 크면
@@ -1293,6 +1305,78 @@ def main():
                                    for p in pages],
                          "chapter_starts": ch_starts, "tails": sorted(tails),
                          "structural_exempt": sorted(structural)}
+
+    # ── G18-COUNT (선택 게이트) — 책이 calc/count_check.py를 갖고 있으면 그것도 판정에 넣는다.
+    #    없으면 아무 일도 하지 않으므로 다른 책에는 영향이 없다.
+    #    ⚠️ 이 훅이 없던 동안, 각 책이 만든 개수·표 산술 규칙은 사람이 손으로 칠 때만 돌았고
+    #       "게이트 PASS"는 그 규칙들을 하나도 보지 않았다(적대적 검수 실증). 규칙을 잘 만들수록
+    #       위험이 커지는 형태였다 — 있다고 믿게 되므로.
+    cc = book_dir / "calc" / "count_check.py"
+    if cc.exists():
+        import subprocess
+        g18 = {"ok": True, "problems": [], "warns": [], "enforced_by": "calc/count_check.py"}
+        try:
+            st = subprocess.run([sys.executable, str(cc), "--selftest"],
+                                capture_output=True, text=True, timeout=180)
+            if st.returncode != 0:
+                g18["problems"].append("셀프테스트 실패 — 이 도구를 믿을 수 없다:\n" + st.stdout.strip()[-800:])
+            # ⚠️ 텍스트를 파싱해 실패/경고를 가르면 기호 하나로 무너진다.
+            #    처음엔 "≠ 없으면 경고"로 갈랐는데, 같은 기호를 쓰는 **합계 행 경고**가
+            #    리포트에서 통째로 사라졌다(적대적 검수 실증). 구조화 출력으로 받는다.
+            r = subprocess.run([sys.executable, str(cc), str(book_dir), "--json"],
+                               capture_output=True, text=True, timeout=180)
+            parsed = None
+            for ln in (r.stdout or "").splitlines():
+                t = ln.strip()
+                if t.startswith("{"):
+                    try:
+                        parsed = json.loads(t); break
+                    except Exception:
+                        pass
+            if parsed is not None:
+                g18["problems"] += list(parsed.get("실패", []))
+                g18["warns"] += list(parsed.get("경고", []))
+                # 도구가 '사람이 확인할 것'으로 분류한 항목도 리포트에 남긴다.
+                # 안 실으면 R10-M1과 같은 계열(도구는 분류했는데 산출물에서 사라짐)이 된다.
+                g18["warns"] += [f"[수사] {x}" for x in parsed.get("수사", [])]
+                # ⚠️ **"검사기 없음"과 "검사기가 볼 게 없었음"은 다른 상태다.**
+                #    전자는 skip(위 else 분기), 후자는 규칙이 실제로 돌았지만 대상이 0개인
+                #    경우다 — 실측을 리포트에 싣지 않으면 둘 다 "문제 0건"으로 보여
+                #    캡션·목록 형식이 바뀌어 규칙이 통째로 헛돈 것을 아무도 못 본다.
+                #    (자매 사고: 키트 스캐너의 `if (boxes.length)` — 대상 0개면 조용히
+                #     건너뛰고 로그에는 "0곳 확인"이라 찍혀 통과처럼 보였다.)
+                실측 = parsed.get("실측")
+                if isinstance(실측, dict):
+                    g18["measured"] = 실측
+                    수치 = [v for v in 실측.values() if isinstance(v, (int, float))]
+                    if 수치 and not any(수치):
+                        g18["warns"].append(
+                            "검사기가 돌았으나 대상 0개 — 규칙이 아무것도 보지 않았다"
+                            f" (실측 {실측}). 캡션·목록 형식 변경 의심")
+                else:
+                    g18["warns"].append("검사기가 실측 개수를 보고하지 않음 — 대상 0개인지 확인 불가")
+            else:
+                # --json 미지원(구버전 스캐너) — 블록 헤더로 분기하는 폴백
+                블록 = None
+                for ln in ((r.stdout or "") + (r.stderr or "")).splitlines():
+                    t = ln.strip()
+                    if t.startswith("⚠️ 경고"): 블록 = "warn"; continue
+                    if t.startswith("❌ 불일치"): 블록 = "fail"; continue
+                    if not t.startswith("- "): continue
+                    (g18["warns"] if 블록 == "warn" else g18["problems"]).append(t[2:])
+                if r.returncode not in (0,) and not g18["problems"]:
+                    g18["problems"].append(f"count_check exit={r.returncode}")
+                g18["warns"].append("검사기가 --json을 지원하지 않아 텍스트 폴백으로 읽음 "
+                                    "— 실측 개수 미확인(대상 0개 여부를 알 수 없다)")
+        except Exception as e:
+            g18["problems"].append(f"count_check 실행 실패: {e}")
+        g18["ok"] = not g18["problems"]
+        report["gates"]["G18-COUNT"] = g18
+        report["warns"] += [f"G18-COUNT: {w}" for w in g18["warns"]]
+        if not g18["ok"]:
+            fails += [f"G18-COUNT: {p_}" for p_ in g18["problems"]]
+    else:
+        report["warns"].append("G18-COUNT: skip — calc/count_check.py 없음(이 책은 개수·표 산술 규칙 미보유)")
 
     if fails:
         finish(book_dir, report, fails)

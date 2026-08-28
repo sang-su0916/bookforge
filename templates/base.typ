@@ -203,7 +203,7 @@
     linebreak()
     if "date" in meta [초판 1쇄 발행 #meta.date]
     linebreak()
-    [펴낸곳 bookforge · 조판 bookforge 자동 조판 파이프라인]
+    [펴낸곳 #meta.at("publisher", default: "엘비즈파트너스")]
     linebreak()
     [본문 서체 #merged((:)).body-font.at(0) · 표제 서체 #merged((:)).display-font.at(0)]
     linebreak()
@@ -238,7 +238,7 @@
 #let book(meta: (:), tokens: (:), cover: none, toc: true, toc-title: "차례", toc-cols: 1, body) = {
   let t = merged(tokens)
 
-  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "bookforge"))
+  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "엘비즈파트너스"))
   set page(
     width: t.trim.w, height: t.trim.h,
     margin: (top: t.margin.top, bottom: t.margin.bottom, left: t.margin.left, right: t.margin.right),
