@@ -1,6 +1,6 @@
 ---
 name: lbiz-book
-description: Generate commercial-book-quality Korean ebook PDFs from a topic or a finished manuscript. Six design styles (practical, insight, academic, essay, business, magazine) with real book anatomy — cover, TOC with page numbers, chapter openers, running heads, QC gates. Use when the user wants an ebook, a PDF book or report, book typesetting, or mentions 전자책, PDF 책, 책 조판, 엘비즈 책, lbiz-book, 북포지, bookforge.
+description: Generate commercial-book-quality Korean ebook PDFs from a topic or a finished manuscript. Six design styles (practical, insight, academic, essay, business, magazine) with real book anatomy — cover, TOC with page numbers, chapter openers, running heads, QC gates. Use when the user wants an ebook, a PDF book or report, book typesetting, or mentions 전자책, PDF 책, 책 조판, 엘비즈 책, lbiz-book, 북포지, bookforge. **Use this when the deliverable is a typeset PDF book** — commercial quality, design styles, QC gates. **Do NOT use** when the user wants an editable Word draft or lecture slides as the main output (that is `vibebook`), or an EPUB for e-readers (`markdown-to-epub`).
 ---
 
 # bookforge — 상업도서급 전자책 PDF 공장
