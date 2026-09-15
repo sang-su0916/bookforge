@@ -1,0 +1,38 @@
+{
+  "brand_profile": "lbiz-partners",
+  "layout_profile": "lbiz-editorial-branded",
+  "brand": "#1B2A4A",
+  "accent": "#C8A96E",
+  "brand_light": "#E8D5B7",
+  "navy_900": "#111A2D",
+  "navy_500": "#2D4373",
+  "paper": "#F6F1E6",
+  "ink": "#141A26",
+  "ink_muted": "#626A76",
+  "publisher": "엘비즈파트너스",
+  "publisher_en": "L.Biz Partners",
+  "author": "이상수",
+  "series": "이상수의 법인전환 판단실",
+  "series_no": "PRACTICAL WHITEPAPER 01",
+  "slogan": "법인전환, 감이 아니라 숫자로 판단합니다.",
+  "cover_statement": "대표가 자기 회사의 숫자로 전환할 때와 기다릴 때를 구분하도록 돕습니다.",
+  "logo": "brand-assets/lbiz-partners-gold-logo.png",
+  "imprint": {
+    "label": "BY LBIZ PARTNERS",
+    "name": "이상수",
+    "role": "엘비즈파트너스 대표",
+    "phone": "010-3709-5785",
+    "email": "sangsu0916@naver.com",
+    "site": "lbiz-partners.com",
+    "tagline": "법인전환, 감이 아니라 숫자로 판단합니다.",
+    "credentials": [
+      "중소기업 경영컨설팅",
+      "법인전환·가업승계·AI 경영자문"
+    ],
+    "books": [
+      "잘되는 회사는 분명 특별한 이유가 있다",
+      "경영컨설팅은 끝났다"
+    ],
+    "note": "본 백서는 교육·운영 설계용이며, 실제 적용은 현행 원문과 전문가 검토가 필요합니다."
+  }
+}

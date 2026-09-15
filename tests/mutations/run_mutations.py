@@ -175,12 +175,14 @@ from qc_gate import (g1_scale_check, line_records, g3_collide_page, _column_band
                      front_frame_for, collide_exempt_pages, LINT_HARD_CODES,
                      COLLIDE_OX_PT, OVERLAP_APPROVE_MAX_OX_PT, MM2PT, TOL)
 import g16_tokens as g16
+from build import resolve_book_profile, resolve_layout_profile
 
 
 def style_tokens(book_dir):
-    book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
-    return book["style"], json.loads(
-        (SKILL / "styles" / book["style"] / "tokens.json").read_text(encoding="utf-8"))
+    raw_book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    book = resolve_book_profile(raw_book)
+    tokens = json.loads((SKILL / "styles" / book["style"] / "tokens.json").read_text(encoding="utf-8"))
+    return book["style"], resolve_layout_profile(tokens, book)
 
 
 def collide_scan(doc, style, tokens):
@@ -783,7 +785,7 @@ def paint_probe_book(root, style, tokens, mode):
             "role": dict(zip(pal, roles)).get(fg)}
 
 
-def run_render_diagrams(book_dir, style, style_dir=None):
+def run_render_diagrams(book_dir, style, style_dir=None, tokens_override=None):
     """render_diagrams.mjs를 실제로 돌린다. (rc, stdout+stderr) 반환.
 
     style_dir를 주면 `--style-dir`로 스타일 팩 **임시 사본**을 읽힌다(저장소 styles/는
@@ -798,12 +800,19 @@ def run_render_diagrams(book_dir, style, style_dir=None):
                                           text=True).stdout.strip()
     except OSError:
         pass
-    cmd = ["node", str(SKILL / "scripts" / "render_diagrams.mjs"),
-           str(book_dir), "--style", style]
-    if style_dir:
-        cmd += ["--style-dir", str(style_dir)]
-    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    return r.returncode, (r.stdout or "") + (r.stderr or "")
+    with tempfile.TemporaryDirectory() as override_td:
+        cmd = ["node", str(SKILL / "scripts" / "render_diagrams.mjs"),
+               str(book_dir), "--style", style]
+        if style_dir:
+            cmd += ["--style-dir", str(style_dir)]
+        elif tokens_override is not None:
+            override_dir = Path(override_td) / "style"
+            override_dir.mkdir()
+            (override_dir / "tokens.json").write_text(
+                json.dumps(tokens_override, ensure_ascii=False), encoding="utf-8")
+            cmd += ["--style-dir", str(override_dir)]
+        r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
 def pick_body_page(doc, ch_starts, first_ch):
@@ -847,10 +856,10 @@ def load(book_dir):
 
 
 def declared_body_pt(book_dir):
-    """book.json의 style → styles/<style>/tokens.json의 body_pt."""
-    book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    raw_book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    book = resolve_book_profile(raw_book)
     tokens = json.loads((SKILL / "styles" / book["style"] / "tokens.json").read_text(encoding="utf-8"))
-    return tokens.get("body_pt")
+    return resolve_layout_profile(tokens, book).get("body_pt")
 
 
 def mutate_global_shrink(src, dst, k=0.8035):
@@ -985,10 +994,16 @@ def mutate_alien_color(doc, titles):
 
 
 def mutate_low_contrast(doc, ch_starts):
-    """본문 면에 흰 바탕 위 #c8c8c8 8pt 텍스트 주입 (대비 1.6:1)."""
+    """본문 면의 균일한 여백에 #c8c8c8 8pt 텍스트 주입 (대비 1.6:1).
+
+    페이지 중앙은 브랜드 도비라·콜아웃·사진이 차지할 수 있어 픽셀 링이
+    불안정한 배경으로 분류될 수 있다. 첫 본문 면의 좌상단 본문 여백은
+    예제·브랜디드 레이아웃 모두에서 흰 지면으로 유지되므로, 변조 자체가
+    배경 추정에 묻히지 않도록 고정한다.
+    """
     pno = ch_starts[0]  # 첫 장 시작 다음 면쯤이 무난
     page = doc[min(pno, doc.page_count - 1)]
-    page.insert_text(fitz.Point(page.rect.x1 / 2, page.rect.y1 / 2),
+    page.insert_text(fitz.Point(page.rect.x0 + 40, page.rect.y0 + 70),
                      "저대비 변조 표본", fontsize=8, fontfile=str(
                          SKILL / "assets" / "fonts" / "Pretendard-Regular.ttf"),
                      fontname="F-mut", color=(0.784, 0.784, 0.784))
@@ -1806,16 +1821,16 @@ def main():
         else:
             bd_rj = Path(td) / "m19-reject"
             spec_rj = figfit_probe_book(bd_rj, style, tokens, "reject")
-            rc_rj, out_rj = run_render_diagrams(bd_rj, style)
+            rc_rj, out_rj = run_render_diagrams(bd_rj, style, tokens_override=tokens)
             bd_sh = Path(td) / "m19-shrink"
             figfit_probe_book(bd_sh, style, tokens, "shrink")
-            rc_sh, out_sh = run_render_diagrams(bd_sh, style)
+            rc_sh, out_sh = run_render_diagrams(bd_sh, style, tokens_override=tokens)
             mp_sh = bd_sh / "assets" / "fig-01.metrics.json"
             fit_sh = (json.loads(mp_sh.read_text(encoding="utf-8")).get("fit") or {}
                       ) if mp_sh.exists() else {}
             bd_cl = Path(td) / "m19-control"
             figfit_probe_book(bd_cl, style, tokens, "control")
-            rc_cl, out_cl = run_render_diagrams(bd_cl, style)
+            rc_cl, out_cl = run_render_diagrams(bd_cl, style, tokens_override=tokens)
             mp_cl = bd_cl / "assets" / "fig-01.metrics.json"
             fit_cl = (json.loads(mp_cl.read_text(encoding="utf-8")).get("fit") or {}
                       ) if mp_cl.exists() else {}

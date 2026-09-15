@@ -6,7 +6,7 @@ Reads  <book_dir>/book.json + outline.json + chapters/*.md
 Route  style -> engine (typst | html) from styles/<style>/tokens.json ("engine").
 Output <book_dir>/draft/book.pdf   (never writes final/ — that is qc_gate's job)
 """
-import json, os, shutil, subprocess, sys
+import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -14,6 +14,18 @@ import g16_tokens  # noqa: E402
 
 SKILL = Path(__file__).resolve().parent.parent
 FONTS = SKILL / "assets" / "fonts"
+BRAND_PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+DEFAULT_BRAND_PROFILE = "lbiz-partners"
+DEFAULT_LAYOUT_PROFILE = "lbiz-editorial-branded"
+EDITORIAL_ASSETS = (
+    "three-doors.png",
+    "threshold-desk.png",
+    "audit-calendar.png",
+    "evidence-chain.png",
+    "three-layers.png",
+    "audit-report.png",
+    "roadmap-faq.png",
+)
 
 def die(msg: str):
     print(f"BUILD FAIL: {msg}", file=sys.stderr)
@@ -49,17 +61,117 @@ def run_g16(style: str, style_dir: Path, tokens: dict, book: dict, warn_only: bo
         return
     die("G16-TOKENS:\n  " + "\n  ".join(fails) + "\n  (긴급 시 --g16-warn-only)")
 
+def _merge_dicts(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def resolve_brand_profile(book: dict) -> dict:
+    profile_name = book.get("brand_profile")
+    if profile_name is None:
+        return book
+    if not isinstance(profile_name, str) or not BRAND_PROFILE_RE.fullmatch(profile_name):
+        die("book.json: brand_profile은 소문자·숫자·하이픈·밑줄만 사용할 수 있음")
+    profile_path = SKILL / "brands" / f"{profile_name}.json"
+    if not profile_path.is_file():
+        die(f"brand profile missing: {profile_path}")
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        die(f"brand profile JSON invalid: {profile_path}: {exc}")
+    if not isinstance(profile, dict):
+        die(f"brand profile must be an object: {profile_path}")
+    return _merge_dicts(profile, book)
+
+
+def resolve_book_profile(raw_book: dict) -> dict:
+    book = dict(raw_book)
+    if "style" not in book:
+        book["style"] = "business"
+    if book.get("style") == "business" and "brand_profile" not in book:
+        book["brand_profile"] = DEFAULT_BRAND_PROFILE
+    book = resolve_brand_profile(book)
+    if (book.get("style") == "business"
+            and "layout_profile" not in raw_book
+            and "layout_profile" not in book):
+        book["layout_profile"] = DEFAULT_LAYOUT_PROFILE
+    return book
+
+
+def resolve_layout_profile(tokens: dict, book: dict) -> dict:
+    profile_name = book.get("layout_profile")
+    profiles = tokens.get("layout_profiles")
+    if not isinstance(profile_name, str) or not isinstance(profiles, dict):
+        return tokens
+    override = profiles.get(profile_name)
+    if not isinstance(override, dict):
+        return tokens
+    return _merge_dicts(tokens, override)
+
+
+def output_slug(book: dict, book_dir: Path) -> str:
+    slug = book.get("output_slug") or book_dir.name
+    if not isinstance(slug, str) or not re.fullmatch(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", slug):
+        die("book.json: output_slug은 영문·숫자·점·밑줄·하이픈으로만 지정해야 함")
+    return slug
+
+
+def prepare_brand_logo(book_dir: Path, meta: dict):
+    logo = meta.get("logo")
+    if not logo:
+        return
+    logo_path = Path(str(logo))
+    candidates = [logo_path] if logo_path.is_absolute() else [book_dir / logo_path, SKILL / logo_path]
+    source = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if source is None:
+        die(f"brand logo missing: {logo}")
+    asset_dir = book_dir / "assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    target = asset_dir / source.name
+    if source.resolve() != target.resolve():
+        if target.exists():
+            if source.read_bytes() != target.read_bytes():
+                die(f"brand logo target exists with different bytes: {target}")
+        else:
+            shutil.copyfile(source, target)
+    meta["_brand_logo"] = f"../../assets/{target.name}"
+
+
+def prepare_editorial_assets(book_dir: Path, meta: dict):
+    if (meta.get("style") != "business"
+            or meta.get("layout_profile") != "lbiz-editorial-branded"):
+        return
+    asset_dir = book_dir / "assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    for name in EDITORIAL_ASSETS:
+        source = asset_dir / name
+        bundled = SKILL / "brand-assets" / name
+        if not source.is_file():
+            if not bundled.is_file():
+                die(f"branded editorial asset missing: {name}")
+            shutil.copyfile(bundled, source)
+
+
 def load(book_dir: Path):
-    book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    raw_book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    if not isinstance(raw_book, dict):
+        die("book.json must be an object")
+    book = resolve_book_profile(raw_book)
     outline = json.loads((book_dir / "outline.json").read_text(encoding="utf-8"))
     style = book.get("style") or die("book.json: style missing")
     style_dir = SKILL / "styles" / style
     if not style_dir.exists():
         die(f"unknown style: {style}")
     tokens = json.loads((style_dir / "tokens.json").read_text(encoding="utf-8"))
+    tokens = resolve_layout_profile(tokens, book)
     return book, outline, style_dir, tokens
 
-def render_diagrams(book_dir: Path, book: dict):
+def render_diagrams(book_dir: Path, book: dict, tokens: dict | None = None):
     """P1.5 도해 프리렌더: diagrams/fig-*.json -> assets/fig-*.svg (+labels.json).
 
     images 정책(book.json)은 여기서 살아 있는 스위치가 된다 —
@@ -73,8 +185,17 @@ def render_diagrams(book_dir: Path, book: dict):
     env = dict(os.environ)
     env["NODE_PATH"] = subprocess.run(["npm", "root", "-g"], capture_output=True,
                                       text=True).stdout.strip()
-    r = subprocess.run(["node", str(SKILL / "scripts" / "render_diagrams.mjs"),
-                        str(book_dir), "--style", book["style"]],
+    diagram_style_dir = None
+    if tokens is not None:
+        diagram_style_dir = book_dir / "typeset" / "_diagram_style"
+        diagram_style_dir.mkdir(parents=True, exist_ok=True)
+        (diagram_style_dir / "tokens.json").write_text(
+            json.dumps(tokens, ensure_ascii=False), encoding="utf-8")
+    command = ["node", str(SKILL / "scripts" / "render_diagrams.mjs"),
+               str(book_dir), "--style", book["style"]]
+    if diagram_style_dir is not None:
+        command.extend(["--style-dir", str(diagram_style_dir)])
+    r = subprocess.run(command,
                        capture_output=True, text=True, env=env)
     if r.stdout.strip():
         print(r.stdout.strip())
@@ -94,6 +215,8 @@ def build_typst(book_dir: Path, book: dict, outline: dict, style_dir: Path, toke
     shutil.copy(SKILL / "templates" / "base.typ", style_snap / "base.typ")
     shutil.copy(style_dir / "theme.typ", style_snap / "theme.typ")
     meta = dict(book)
+    prepare_brand_logo(book_dir, meta)
+    prepare_editorial_assets(book_dir, meta)
     for name in ("cover-art.png", "cover.png", "cover.jpg"):
         if (book_dir / "assets" / name).exists():
             meta["_cover_art"] = f"../../assets/{name}"
@@ -130,7 +253,9 @@ def build_typst(book_dir: Path, book: dict, outline: dict, style_dir: Path, toke
         '#import "_style/theme.typ": *',
         "#show: book.with(meta: meta, tokens: theme-tokens, cover: make-cover(meta), toc: true)",
         *includes,
-        "#colophon(meta, TT)",
+        ("#source-list(meta, TT)" if (book.get("style") == "business"
+                                      and book.get("layout_profile") == "lbiz-editorial-branded")
+         else "#colophon(meta, TT)"),
     ])
     (ts / "main.typ").write_text(main, encoding="utf-8")
 
@@ -159,11 +284,11 @@ def main():
     run_g16(book["style"], style_dir, tokens, book, warn_only)
     # 재빌드 시작 = 이전 final/ 무효화. final/은 이번 산출물이 게이트를 통과한
     # 뒤에만 다시 생긴다 (qc_gate FAIL 경로의 제거와 이중 방어).
-    stale = book_dir / "final" / f"{book_dir.name}.pdf"
+    stale = book_dir / "final" / f"{output_slug(book, book_dir)}.pdf"
     if stale.exists():
         stale.unlink()
         print(f"재빌드: 이전 final 무효화 -> {stale}")
-    render_diagrams(book_dir, book)
+    render_diagrams(book_dir, book, tokens)
     engine = tokens.get("engine", "typst")
     if engine == "typst":
         build_typst(book_dir, book, outline, style_dir, tokens)

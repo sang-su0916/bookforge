@@ -12,6 +12,20 @@
 | `theme.html` + `theme.css` | (html 엔진) 페이지 골격 + 인쇄 스타일시트 |
 | `decorate.py` | (html 엔진, 선택) 렌더 후 PyMuPDF 러닝 장식 스탬핑 |
 
+## 브랜드 프로필 계약
+
+`brands/<name>.json`은 스타일 팩과 분리된 발행 브랜드 기본값이다. `book.json`의 `brand_profile`이 이름을 선택하면 `scripts/build.py`가 프로필을 읽고 책 단위 메타데이터를 재귀 병합한다. 프로필 경로는 안전한 파일명 패턴으로 제한하며, 없는 프로필·잘못된 JSON은 렌더 전에 중단한다.
+
+이 설치본의 기본 경로는 `business` + `lbiz-partners` + `lbiz-editorial-branded`다. `scripts/build.py`의 `resolve_book_profile()`은 `style`이 없으면 `business`를 선택하고, `business` manifest에 `brand_profile`이 없을 때 `lbiz-partners`를, 프로필 병합 뒤에도 `layout_profile`이 없을 때 `lbiz-editorial-branded`를 보강한다. `scripts/scaffold.py`는 새 기본 책에 같은 값을 기록한다. 사용자가 `style`, `brand_profile`, `layout_profile`을 명시한 경우에는 그 값을 보존해야 하며, 기본값을 기존 설정 위에 덮어쓰면 안 된다.
+
+프로필은 다음 값을 사용할 수 있다: `brand`, `accent`, `brand_light`, `navy_900`, `navy_500`, `paper`, `ink`, `ink_muted`, `publisher`, `publisher_en`, `author`, `series`, `series_no`, `slogan`, `logo`, `imprint`, `disclaimer`. 스타일은 필요한 값만 소비하며, 책 단위 값이 프로필보다 우선한다.
+
+`logo`는 절대 경로 또는 책 프로젝트·스킬 폴더 기준의 상대 경로로 지정한다. 빌더는 파일을 책 프로젝트 `assets/`에 고정하고 Typst 메타데이터 `_brand_logo`로 전달한다. 같은 이름의 기존 파일 바이트가 다르면 조용히 덮어쓰지 않고 실패한다. 표지·판권면의 로고와 발행 정보는 조판 레이어에서 렌더되어야 하며, `brand`는 고대비 본문·도해 색, `accent`는 장식·강조 색으로 분리한다.
+
+`layout_profile: "lbiz-editorial-branded"`를 선택하면 빌더가 `brand-assets/`의 편집형 도비라 일러스트를 책 프로젝트 `assets/`에 자동 공급한다. 책 프로젝트에 같은 이름의 파일이 이미 있으면 그 파일을 사용하고, 번들 에셋이 없으면 렌더 전에 중단한다.
+
+브랜드 프로필을 추가하거나 수정한 뒤에는 실제 책 프로젝트로 `build.py`·`qc_gate.py`를 실행하고, 표지·본문 도해·끝면 콘택트시트를 눈으로 확인한다. 프로필 JSON만 존재하거나 `book.json`에 이름만 적힌 상태는 적용 완료가 아니다.
+
 ## Typst 테마 계약
 
 `theme.typ`는 `templates/base.typ`(빌드 시 같은 폴더로 스냅샷됨)를 `#import "base.typ"`로 가져오고, 다음 심볼을 반드시 export한다 — 생성되는 main.typ과 md 변환 결과가 이 이름들을 호출한다:

@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """bookforge scaffold: create a new book project directory.
 
-Usage: python3 scaffold.py <book_dir> --style practical --title "제목" \
+Usage: python3 scaffold.py <book_dir> [--style business] --title "제목" \
          [--subtitle S] [--length short|standard|long] [--author A] [--brand "#hex"] \
-         [--images vector|generated|none]
+         [--brand-profile NAME] [--layout-profile NAME] [--images vector|generated|none]
 Creates book.json, outline.json (stub), chapters/, assets/, diagrams/, qc/.
 """
 import argparse, json
 from pathlib import Path
 
+DEFAULT_BRAND_PROFILE = "lbiz-partners"
+DEFAULT_LAYOUT_PROFILE = "lbiz-editorial-branded"
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("book_dir")
-    p.add_argument("--style", required=True,
+    p.add_argument("--style", default="business",
                    choices=["practical", "insight", "academic", "essay", "business", "magazine"])
     p.add_argument("--title", required=True)
     p.add_argument("--subtitle", default=None)
     p.add_argument("--length", default="short", choices=["short", "standard", "long"])
-    p.add_argument("--author", default="bookforge")
+    p.add_argument("--author", default="이상수")
     p.add_argument("--brand", default=None)
+    p.add_argument("--brand-profile", default=None)
+    p.add_argument("--layout-profile", default=None)
     p.add_argument("--date", default=None)
     p.add_argument("--images", default="vector", choices=["vector", "generated", "none"])
     a = p.parse_args()
@@ -29,8 +34,17 @@ def main():
     (d / "diagrams").mkdir(exist_ok=True)  # 도해 사이드카(fig-NN.json) — references/diagrams.md
     (d / "qc").mkdir(exist_ok=True)        # 콘택트시트 등 검수 산출물
 
+    brand_profile = a.brand_profile
+    if a.style == "business" and brand_profile is None:
+        brand_profile = DEFAULT_BRAND_PROFILE
     book = {"title": a.title, "subtitle": a.subtitle, "author": a.author,
             "style": a.style, "length": a.length, "images": a.images}
+    if brand_profile is not None:
+        book["brand_profile"] = brand_profile
+    if a.style == "business" and a.layout_profile:
+        book["layout_profile"] = a.layout_profile
+    elif a.style == "business" and brand_profile == DEFAULT_BRAND_PROFILE:
+        book["layout_profile"] = DEFAULT_LAYOUT_PROFILE
     if a.brand:
         book["brand"] = a.brand
     if a.date:

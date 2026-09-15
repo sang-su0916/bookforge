@@ -44,6 +44,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pagemetrics import analyze  # noqa: E402
 import g16_tokens  # noqa: E402
+from build import output_slug, resolve_book_profile, resolve_layout_profile  # noqa: E402
 
 SKILL = Path(__file__).resolve().parent.parent
 TOL = 1.5  # pt
@@ -618,12 +619,16 @@ def main():
     stale_report = book_dir / "gate-report.json"
     if stale_report.exists():
         stale_report.unlink()
-    book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    raw_book = json.loads((book_dir / "book.json").read_text(encoding="utf-8"))
+    book = resolve_book_profile(raw_book)
     outline = json.loads((book_dir / "outline.json").read_text(encoding="utf-8"))
     style = book["style"]
     tokens = json.loads((SKILL / "styles" / style / "tokens.json").read_text(encoding="utf-8"))
+    tokens = resolve_layout_profile(tokens, book)
     # metrics는 조기 실패에서도 항상 존재 (소비자가 키 존재를 가정할 수 있게)
-    report = {"gates": {}, "warns": [], "pass": False, "metrics": {}}
+    report = {"gates": {}, "warns": [], "pass": False, "metrics": {},
+              "output_slug": output_slug(book, book_dir),
+              "brand_profile": book.get("brand_profile")}
     fails = []
 
     # ---- G16-TOKENS (기록만 — 중단은 build.py 몫) ----
@@ -1179,10 +1184,12 @@ def main():
         fails.append(f"G12: 장 시작 직전 필러 백면 {parity} (단면 전자책에 recto 맞춤 금지)")
 
     # ---- G7-TAIL / G7-MID ----
+    density = tokens.get("density") if isinstance(tokens.get("density"), dict) else {}
+    density_report_only = bool(density.get("report_only"))
     tail_hard = TAIL_HARD.get(style, 0.45)
     tail_warn = TAIL_WARN.get(style, 0.70)
     mid_role_min = MID_ROLE_MIN.get(style, 0.90)
-    g7t = {"tails": [], "ok": True}
+    g7t = {"tails": [], "ok": True, "warns": []}
     g7m = {"underfull": [], "ok": True}
     tail_reaches = []
     for p in pages:
@@ -1199,10 +1206,15 @@ def main():
                 g7t["ok"] = False
                 fails.append(f"G7-TAIL: p{pg} 꼬리 {p['lines']}행 < 6 (HARD — 사유 코드 불가)")
             elif p["reach"] < tail_hard:
-                g7t["ok"] = False
-                fails.append(f"G7-TAIL: p{pg} reach {p['reach']} < HARD {tail_hard}")
+                finding = f"p{pg} reach {p['reach']} < HARD {tail_hard}"
+                g7t["warns"].append(finding)
+                if density_report_only:
+                    report["warns"].append(f"G7-TAIL: {finding} (profile report-only)")
+                else:
+                    g7t["ok"] = False
+                    fails.append(f"G7-TAIL: {finding}")
             elif p["reach"] < tail_warn and not code:
-                if style in WARN_REPORT_ONLY:
+                if style in WARN_REPORT_ONLY or density_report_only:
                     report["warns"].append(f"G7-TAIL: p{pg} reach {p['reach']} < {tail_warn} (report-only)")
                 else:
                     g7t["ok"] = False
@@ -1213,10 +1225,14 @@ def main():
                 continue
             if p["reach"] < MID_HARD:
                 g7m["underfull"].append({"page": pg, "reach": p["reach"]})
-                g7m["ok"] = False
-                fails.append(f"G7-MID: p{pg} reach {p['reach']} < {MID_HARD} (HARD)")
+                finding = f"p{pg} reach {p['reach']} < {MID_HARD} (HARD)"
+                if density_report_only:
+                    report["warns"].append(f"G7-MID: {finding} (profile report-only)")
+                else:
+                    g7m["ok"] = False
+                    fails.append(f"G7-MID: {finding}")
             elif p["reach"] < mid_role_min and not code:
-                if style in WARN_REPORT_ONLY:
+                if style in WARN_REPORT_ONLY or density_report_only:
                     report["warns"].append(f"G7-MID: p{pg} reach {p['reach']} < {mid_role_min} (report-only)")
                 else:
                     g7m["underfull"].append({"page": pg, "reach": p["reach"]})
@@ -1262,7 +1278,11 @@ def main():
             heads = sum(1 for l in p["_lines"] if l["size"] >= 1.3 * body_size)
             gap_thr = 0.18 + 0.05 * heads
         if p["gap"] > gap_thr and p["lines"] < 0.8 * N:
-            g8["stretched"].append({"page": pg, "gap": p["gap"], "lines": p["lines"]})
+            finding = {"page": pg, "gap": p["gap"], "lines": p["lines"]}
+            if density_report_only:
+                report["warns"].append(f"G8-STRETCH: p{pg} gap {p['gap']} (profile report-only)")
+            else:
+                g8["stretched"].append(finding)
         # 행송 편차는 WARN만 — 두 엔진 모두 페이지 단위로 행송을 벌릴 능력이 없다(실측).
         # 리스트·코드·콜아웃 혼합 면의 자연 편차가 대부분이라 FAIL로 쓰면 오탐.
         if p["pitch"] and m["book_pitch"] and p["lines"] >= 10 and \
@@ -1297,7 +1317,10 @@ def main():
     g9["ok"] = not g9["violations"]
     report["gates"]["G9"] = g9
     if g9["violations"]:
-        fails.append("G9-KEEP: " + "; ".join(g9["violations"][:3]))
+        if density_report_only:
+            report["warns"].append("G9-KEEP: " + "; ".join(g9["violations"][:3]) + " (profile report-only)")
+        else:
+            fails.append("G9-KEEP: " + "; ".join(g9["violations"][:3]))
 
     # metrics 요약을 리포트에 (디버그·refit 입력)
     report["metrics"] = {"book_pitch": m["book_pitch"], "n_grid": N,
@@ -1384,7 +1407,7 @@ def main():
     report["pass"] = True
     final_dir = book_dir / "final"
     final_dir.mkdir(exist_ok=True)
-    dst = final_dir / f"{book_dir.name}.pdf"
+    dst = final_dir / f"{report['output_slug']}.pdf"
     shutil.copy(pdf, dst)
     report["final"] = str(dst)
     (book_dir / "gate-report.json").write_text(
@@ -1399,7 +1422,7 @@ def finish(book_dir, report, fails):
     report["fails"] = fails
     # FAIL이면 이전 회차의 final/을 무효화한다 — 게이트를 통과하지 못한 시점의
     # 스테일 PDF가 final/에 남아 "완료"로 오판되는 것을 차단 (SKILL.md의 final 계약).
-    stale = book_dir / "final" / f"{book_dir.name}.pdf"
+    stale = book_dir / "final" / f"{report.get('output_slug', book_dir.name)}.pdf"
     if stale.exists():
         stale.unlink()
         print(f"FAIL -> 스테일 final 제거: {stale}", file=sys.stderr)

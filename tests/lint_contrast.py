@@ -51,6 +51,7 @@ SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
 
 import g16_tokens as g16   # noqa: E402  대비 산술·색 해석의 단일 진리원
+from build import resolve_book_profile  # noqa: E402
 
 # 굵기 임계. WCAG의 대형 텍스트 예외는 bold=700 기준이고, 그보다 낮게 잡으면
 # 10.5pt 이상에서 하한이 4.5 -> 3.0으로 **완화**되므로 보수적 방향(700)을 쓴다.
@@ -1112,7 +1113,7 @@ def lint_book(book_dir, style_dir_override=None):
     if not bj.exists():
         res["skipped"] = f"book.json 없음 — {bj}"
         return res
-    book = json.loads(bj.read_text(encoding="utf-8"))
+    book = resolve_book_profile(json.loads(bj.read_text(encoding="utf-8")))
     style = book.get("style")
     res["style"] = style
     style_dir = Path(style_dir_override) if style_dir_override else (SKILL / "styles" / style)

@@ -2,10 +2,9 @@
 // → assets/fig-NN.svg (+ fig-NN.labels.json, G13 대조 정본).
 //
 // Usage: node render_diagrams.mjs <book_dir> --style <style> [--style-dir <dir>]
-//   --style-dir : 스타일 팩 디렉토리 override(**테스트 전용**). 출하 경로(build.py)는 절대
-//                 넘기지 않으며, 넘겨도 `--style` 이름은 로그·metrics에 그대로 남는다.
-//                 뮤테이션이 저장소 styles/를 변조하지 않고 승격 스위치(labelBand.enforce)의
-//                 양쪽 분기를 실물로 밟기 위한 통로다(g16_tokens.style_inputs(style_dir=)와 같은 선례).
+//   --style-dir : resolved tokens override. build.py uses it for book-level layout profiles;
+//                 mutation tests also use it for temporary style copies. The `--style` name
+//                 remains the public style identifier in logs and metrics.
 // 계약(references/diagrams.md):
 //   사이드카 {bf:{width:"full"|"twothirds", icons:false}, dsl:"..."|[줄배열]}
 //   테마는 스타일 토큰(diagram 블록)이 강제 — 콘텐츠 theme 블록은 덮어쓴다.
@@ -20,6 +19,7 @@ import { convertForeignObjectText, fontFaceCss, normalizeAuthoredSvg, pixelSelfC
 import { contrastFloor, contrastRatio, isBoldSvgText } from "./wcag.mjs";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_BRAND_PROFILE = "lbiz-partners";
 const FONT_DIR = path.join(SKILL, "assets", "fonts");
 const CONVERTER_VERSION = 6; // fo2text/트림 알고리즘 변경 시 올려서 캐시 전체 무효화
 // 대비 판정 **산술 자체**의 지문 (W5 판정 K10 봉합). `paintPolicy`는 손으로 올리는
@@ -254,7 +254,19 @@ const MAXRATIO_VALIDATED = typeof dg.labelBand.maxRatio === "number"
 // 이 스위치는 **자동으로 캐시 해시 파라미터**다 — 승격 순간 그 스타일 도해가 전건 재판정된다.
 const BAND_ENFORCE = !!(dg.labelBand && dg.labelBand.enforce === true);
 // build_html.py와 동일 우선순위: book.json brand가 있으면 강조색(팔레트 1번)만 교체
-const bookMeta = JSON.parse(readFileSync(path.join(bookDir, "book.json"), "utf8"));
+const rawBookMeta = JSON.parse(readFileSync(path.join(bookDir, "book.json"), "utf8"));
+let bookMeta = rawBookMeta;
+const hasBrandProfile = Object.prototype.hasOwnProperty.call(rawBookMeta, "brand_profile");
+if (rawBookMeta.brand_profile !== undefined || (rawBookMeta.style === "business" && !hasBrandProfile)) {
+  const profileName = rawBookMeta.brand_profile === undefined
+    ? DEFAULT_BRAND_PROFILE
+    : rawBookMeta.brand_profile;
+  if (typeof profileName !== "string" || !/^[a-z0-9][a-z0-9_-]*$/.test(profileName)) {
+    fail("book.json brand_profile must use lowercase letters, numbers, hyphens, or underscores");
+  }
+  const profile = JSON.parse(readFileSync(path.join(SKILL, "brands", `${profileName}.json`), "utf8"));
+  bookMeta = { ...profile, ...rawBookMeta };
+}
 const palette = [...dg.palette];
 if (bookMeta.brand) palette[0] = bookMeta.brand;
 

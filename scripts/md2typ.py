@@ -10,7 +10,7 @@ Contract (chapter md):
       ::: tip 제목텍스트
       body md
       :::
-    kinds: info|tip|warn|quote|stat  (stat: first line = value, second = label)
+    kinds: info|tip|warn|quote|example|stat  (stat: first line = value, second = label)
 """
 import json, re, sys
 from pathlib import Path
@@ -267,7 +267,7 @@ def render_table(tokens, ctx, cap=None) -> str:
     return f"#bf-tbl({tbl})\n"
 
 # statrow는 stat보다 먼저 — 대안 순서가 뒤면 "::: statrow"가 stat(title="row")로 오탐된다
-CALLOUT_RE = re.compile(r"^:::\s*(info|tip|warn|quote|statrow|stat|pull|lead|cols)\s*(.*)$")
+CALLOUT_RE = re.compile(r"^:::\s*(info|tip|warn|quote|example|statrow|stat|pull|lead|cols|pagebreak)\s*(.*)$")
 
 def split_callouts(md: str):
     """Yield ('md', text) and ('callout', kind, title, body) segments."""
@@ -307,7 +307,9 @@ def convert_chapter(md_path: Path, out_path: Path, title: str, summary: str | No
             parts.append(render_tokens(MD.parse(seg[1]), ctx))
         else:
             _, kind, title_c, body = seg
-            if kind == "stat":
+            if kind == "pagebreak":
+                parts.append("#pagebreak(weak: true)\n")
+            elif kind == "stat":
                 ls = [l.strip() for l in body.strip().split("\n") if l.strip()]
                 value = ls[0] if ls else ""
                 label = ls[1] if len(ls) > 1 else ""

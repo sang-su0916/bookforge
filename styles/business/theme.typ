@@ -1,23 +1,46 @@
-// bookforge style: business — 비즈니스·컨설팅 리포트 (STYLE.md: 200×280, navy 시스템)
+// bookforge style: business — 비즈니스·컨설팅 리포트.
+// LBiz branded profile follows the supplied ivory A5 editorial template.
 #import "base.typ": default-tokens, keep-words, numpad, chapter-state, full-bleed
 #import "base.typ" as base
 #let code-font = ((name: "DejaVu Sans Mono", covers: regex("[A-Za-z0-9]")), "Pretendard")
 
 #let meta = json("meta.json")
 
-#let navy-900 = rgb("#0A1E38")
-#let navy-700 = rgb("#123A63")
-#let navy-300 = rgb("#7FB2D9")  // 다크(navy) 배경 전용 — 흰 바탕 금지(대비 2.26)
-#let navy-500 = rgb("#3378AD")  // 흰 바탕용 중간톤 (4.74:1)
-#let navy-100 = rgb("#D8E4EF")
+#let brand-editorial = meta.at("layout_profile", default: "") == "lbiz-editorial-branded"
+#let light-editorial = meta.at("layout_profile", default: "") == "lbiz-editorial-light"
+
+#let navy-900 = if brand-editorial {
+  rgb(meta.at("editorial_navy_900", default: "#17233A"))
+} else { rgb(meta.at("navy_900", default: "#111A2D")) }
+#let navy-700 = if brand-editorial {
+  rgb(meta.at("editorial_navy_700", default: "#24466B"))
+} else { rgb(meta.at("brand", default: "#1B2A4A")) }
+#let navy-300 = if brand-editorial {
+  rgb(meta.at("editorial_navy_300", default: "#8EA8BC"))
+} else { rgb("#7FB2D9") }
+#let navy-500 = if brand-editorial {
+  rgb(meta.at("editorial_navy_500", default: "#5D7892"))
+} else { rgb(meta.at("navy_500", default: "#2D4373")) }
+#let navy-100 = if brand-editorial {
+  rgb(meta.at("editorial_navy_100", default: "#E3E8EA"))
+} else { rgb(meta.at("brand_light", default: "#E8D5B7")) }
 #let teal-600 = rgb("#0E6E62")
-#let accent   = rgb(meta.at("brand", default: "#C2662E"))
+#let accent   = if brand-editorial {
+  rgb(meta.at("editorial_accent", default: "#8B650F"))
+} else { rgb(meta.at("accent", default: "#C8A96E")) }
 #let alert-c  = rgb("#B3261E")
-#let ink      = rgb("#1A1D21")
-#let ink-60   = rgb("#5A6169")
-#let ink-30   = rgb("#9AA5B1")
-#let rule-c   = rgb("#D5D9DE")
-#let paper-alt = rgb("#F4F6F8")
+#let ink      = if brand-editorial {
+  rgb(meta.at("editorial_ink", default: "#1D2738"))
+} else { rgb(meta.at("ink", default: "#141A26")) }
+#let ink-60   = if brand-editorial {
+  rgb(meta.at("editorial_ink_muted", default: "#5D6775"))
+} else { rgb(meta.at("ink_muted", default: "#626A76")) }
+#let ink-30   = if brand-editorial { rgb("#A5A9A5") } else { rgb("#9AA5B1") }
+#let rule-c   = if brand-editorial { rgb("#D9D0C1") } else { rgb("#D5D9DE") }
+#let ivory    = if brand-editorial { rgb(meta.at("editorial_paper", default: "#FAF5EB")) } else { white }
+#let paper-alt = if brand-editorial {
+  rgb(meta.at("editorial_paper_alt", default: "#F3EEE4"))
+} else { rgb(meta.at("paper", default: "#F6F1E6")) }
 
 // content → 평문 (목차 Executive Summary 판별용)
 #let plain-text(c) = {
@@ -31,17 +54,22 @@
 }
 
 #let theme-tokens = default-tokens + (
-  trim: (w: 200mm, h: 280mm),
-  // 본문 5컬럼 132.5mm + 바깥 마진 컬럼 22.5mm(+거터 5mm) 확보
-  margin: (top: 28mm, bottom: 30mm, left: 20mm, right: 47.5mm),
+  trim: if brand-editorial { (w: 148mm, h: 210mm) } else { (w: 200mm, h: 280mm) },
+  margin: if brand-editorial {
+    (top: 17mm, bottom: 18mm, left: 14mm, right: 14mm)
+  } else {
+    // 본문 5컬럼 132.5mm + 바깥 마진 컬럼 22.5mm(+거터 5mm) 확보
+    (top: 28mm, bottom: 30mm, left: 20mm, right: 47.5mm)
+  },
   brand: navy-700, brand-light: navy-100,
-  ink: ink, muted: ink-60, paper: white,
+  ink: ink, muted: ink-60, paper: if brand-editorial { ivory } else { white },
   body-font: ("Pretendard",), sans-font: ("Pretendard",),
   display-font: ("Pretendard",),
   // 공식 TTF판의 내부 패밀리명은 "Gmarket Sans TTF" (OTF판 "Gmarket Sans"와 다름)
   stat-font: ("Gmarket Sans TTF", "Gmarket Sans"),
   quote-font: ("Noto Serif KR",),
-  body-size: 10.5pt, body-leading: 0.62em,
+  body-size: if brand-editorial { 9.2pt } else { 10.5pt },
+  body-leading: if brand-editorial { 0.73em } else { 0.62em },
 )
 
 #let TT = theme-tokens
@@ -62,14 +90,122 @@
 }
 
 #let make-cover(meta) = {
+  if brand-editorial {
+    page(margin: 0mm, header: none, footer: none, fill: ivory, {
+      set par(justify: false, first-line-indent: 0em)
+      // Supplied LBiz branded template: ivory field, left-aligned identity,
+      // generous title block, and contact/imprint footer.
+      place(top + left, dx: 14mm, dy: 14mm, {
+        grid(columns: (10mm, 1fr), column-gutter: 2mm,
+          if meta.at("_brand_logo", default: none) != none {
+            image(meta.at("_brand_logo"), width: 8mm)
+          } else {
+            h(8mm)
+          },
+          text(font: TT.sans-font, size: 10pt, weight: "bold", fill: navy-900,
+            meta.at("publisher", default: "엘비즈파트너스")))
+      })
+      place(top + left, dx: 14mm, dy: 53mm, {
+        text(font: TT.sans-font, size: 8pt, weight: "bold", fill: accent,
+          meta.at("publisher", default: "엘비즈파트너스"))
+        v(6mm)
+        text(font: TT.display-font, size: 27pt, weight: "extrabold", tracking: -0.035em,
+          fill: navy-900, keep-words(meta.title))
+        if meta.at("subtitle", default: none) != none {
+          v(5mm)
+          text(font: TT.sans-font, size: 11.5pt, fill: ink-60, keep-words(meta.subtitle))
+        }
+      })
+      place(bottom + left, dx: 14mm, dy: -17mm, {
+        let im = meta.at("imprint", default: (:))
+        block(width: 120mm, {
+          line(length: 100%, stroke: 0.5pt + accent)
+          v(4mm)
+          text(font: TT.sans-font, size: 11pt, weight: "bold", fill: navy-900,
+            im.at("name", default: meta.at("author", default: "이상수")))
+          v(1mm)
+          text(font: TT.sans-font, size: 8.5pt, fill: navy-900,
+            im.at("role", default: meta.at("publisher", default: "엘비즈파트너스") + " 대표"))
+          if im.at("phone", default: none) != none {
+            v(1.5mm)
+            text(font: TT.sans-font, size: 8.2pt, fill: ink-60, "전화 " + im.phone)
+          }
+          if im.at("email", default: none) != none {
+            linebreak()
+            text(font: TT.sans-font, size: 8.2pt, fill: ink-60, "메일 " + im.email)
+          }
+          if im.at("site", default: none) != none {
+            linebreak()
+            text(font: TT.sans-font, size: 8.2pt, fill: ink-60, "홈페이지 " + im.site)
+          }
+          v(2mm)
+          text(font: TT.sans-font, size: 6.2pt, fill: navy-700,
+            "본 자료는 저작권법의 보호를 받습니다. " +
+            meta.at("publisher", default: "엘비즈파트너스") +
+            "의 사전 서면 동의 없이 무단 복제·배포·전송·게시·공유하는 행위를 금하며, 위반 시 관련 법령에 따라 민·형사상 책임을 질 수 있습니다.")
+        })
+      })
+    })
+  } else if light-editorial {
+    page(margin: 0mm, header: none, footer: none, fill: white, {
+      set par(justify: false, first-line-indent: 0em)
+      // Updated LBiz personal-brand cover: white field, centered identity,
+      // restrained gold rule, and a short promise card.  Text remains a
+      // Typst layer so the cover stays searchable and editable.
+      place(top + center, dy: 19mm, block(width: 160mm, {
+        align(center, {
+          if meta.at("_brand_logo", default: none) != none {
+            image(meta.at("_brand_logo"), width: 18mm)
+            v(5mm)
+          }
+          text(font: TT.sans-font, size: 8pt, weight: "bold", tracking: 0.08em,
+            fill: navy-700, "LBIZ PARTNERS  ·  PRACTICAL WHITEPAPER")
+          v(9mm)
+          text(font: TT.display-font, size: 38pt, weight: "extrabold", tracking: -0.03em,
+            fill: navy-900, keep-words(meta.title))
+          if meta.at("subtitle", default: none) != none {
+            v(6mm)
+            text(font: TT.sans-font, size: 14pt, fill: ink-60, keep-words(meta.subtitle))
+          }
+          v(8mm)
+          line(length: 42mm, stroke: 1.5pt + accent)
+          v(6mm)
+          text(font: TT.sans-font, size: 11pt, weight: "semibold", fill: navy-700,
+            meta.at("slogan", default: "법인전환, 감이 아니라 숫자로 판단합니다."))
+          v(7mm)
+          text(font: TT.sans-font, size: 10pt, weight: "medium", fill: navy-700,
+            meta.at("author", default: "이상수") + "  |  " + meta.at("publisher_en", default: "L.Biz Partners"))
+          v(2mm)
+          text(font: TT.sans-font, size: 8.5pt, fill: ink-60,
+            meta.at("basis_date", default: meta.at("date", default: "")))
+        })
+      }))
+      place(bottom + center, dy: -27mm, block(width: 160mm,
+        fill: paper-alt, stroke: (left: 2pt + accent), inset: (x: 6mm, y: 5mm), {
+          text(font: TT.sans-font, size: 8pt, weight: "bold", tracking: 0.04em,
+            fill: navy-700, "이 책의 약속")
+          v(2mm)
+          text(font: TT.sans-font, size: 10pt, fill: ink,
+            meta.at("cover_statement", default: "가족이라서 생략하는 회사가 아니라, 가족이라서 설명 가능한 회사로"))
+        }))
+      place(bottom + left, dx: 20mm, dy: -12mm,
+        text(font: TT.sans-font, size: 8pt, fill: ink-60,
+          meta.at("author", default: "이상수") + "  ·  " + meta.at("publisher", default: "엘비즈파트너스") +
+          "  ·  " + meta.at("date", default: "") + "  ·  " + meta.at("series_no", default: "PRACTICAL WHITEPAPER 01")))
+    })
+  } else {
   page(margin: 0mm, header: none, footer: none, fill: navy-900, {
     set par(justify: false, first-line-indent: 0em)
     block(width: 100%, height: 40%, clip: true, cover-pattern(200mm, 112mm))
     place(top + left, dx: 20mm, dy: 20mm, rect(width: 24mm, height: 4mm, fill: accent))
+    if meta.at("_brand_logo", default: none) != none {
+      place(top + right, dx: -20mm, dy: 16mm,
+        image(meta.at("_brand_logo"), width: 24mm))
+    }
     // 시리즈 라벨: 제목 블록 위 6mm
     place(top + left, dx: 20mm, dy: 114mm,
       text(fill: navy-300, font: TT.display-font, size: 8pt, tracking: 0.06em,
-        upper(meta.at("series", default: "BOOKFORGE INSIGHT REPORT"))))
+        upper(meta.at("series", default: "LBIZ PARTNERS"))))
     // 제목 블록 상단 = 판면 상단(28mm) + 96mm = 페이지 상단 124mm 고정 (STYLE 표지 문법)
     place(top + left, dx: 20mm, dy: 124mm, block(width: 160mm, {
       set text(fill: white, font: TT.display-font)
@@ -87,14 +223,58 @@
         v(6mm)
         text(size: 16pt, weight: "regular", fill: navy-100, keep-words(meta.subtitle))
       }
+      if meta.at("slogan", default: none) != none {
+        v(4mm)
+        text(size: 10pt, weight: "medium", fill: accent, meta.slogan)
+      }
       v(12mm)
       line(length: 100%, stroke: 0.6pt + navy-500.transparentize(40%))
     }))
     place(bottom + left, dx: 20mm, dy: -18mm, {
       set text(size: 8pt, fill: navy-100, font: TT.sans-font)
-      [#meta.at("author", default: "엘비즈파트너스") · #meta.at("date", default: "") · #meta.at("series_no", default: "REPORT 01")]
+      [#meta.at("author", default: "이상수") · #meta.at("publisher", default: "LBiz Partners") · #meta.at("date", default: "") · #meta.at("series_no", default: "")]
     })
   })
+  }
+}
+
+// ---- LBiz supplied branded opener: chapter label + illustration + summary ---
+#let opener-image(n) = {
+  let k = calc.rem(n - 1, 7) + 1
+  if k == 1 { "../../assets/three-doors.png" }
+  else if k == 2 { "../../assets/threshold-desk.png" }
+  else if k == 3 { "../../assets/audit-calendar.png" }
+  else if k == 4 { "../../assets/evidence-chain.png" }
+  else if k == 5 { "../../assets/three-layers.png" }
+  else if k == 6 { "../../assets/audit-report.png" }
+  else { "../../assets/roadmap-faq.png" }
+}
+
+#let branded-opener(n, title, summary, t) = {
+  full-bleed(t, block(fill: ivory, width: 100%, height: 100%, inset: (x: 14mm, y: 17mm), {
+    set text(fill: navy-900, font: t.display-font)
+    set par(justify: false, first-line-indent: 0em)
+    v(1mm)
+    text(font: t.sans-font, size: 8pt, weight: "bold", tracking: 0.08em, fill: accent,
+      "CHAPTER " + numpad(n))
+    v(4mm)
+    text(size: 23pt, weight: "extrabold", tracking: -0.025em, keep-words(title))
+    v(4mm)
+    line(length: 100%, stroke: 0.7pt + accent)
+    if summary != none {
+      v(4mm)
+      set text(size: 9.5pt, weight: "regular", fill: ink-60)
+      set par(leading: 0.72em, justify: false)
+      block(width: 100%, summary)
+    }
+    v(5mm)
+    block(width: 100%, fill: white, stroke: 0.5pt + rule-c, inset: 2mm, radius: 3pt,
+      image(opener-image(n), width: 100%))
+    place(bottom + left, dx: 0mm, dy: -5mm,
+      text(font: t.sans-font, size: 7pt, fill: ink-60,
+        meta.at("publisher", default: "엘비즈파트너스") + " · " +
+        meta.at("date", default: "2026-09")))
+  }))
 }
 
 // ---- 도비라: navy 풀블리드 + 96pt 장번호 + accent 룰 + 하단 절 목록 ----------
@@ -136,6 +316,35 @@
   }))
 }
 
+// LBiz editorial-light chapter divider: keeps the same numbering and
+// hierarchy as the report template while moving the visual weight to a
+// readable white field for the updated personal-brand system.
+#let light-opener(n, title, summary, t) = {
+  full-bleed(t, block(fill: white, width: 100%, height: 100%, inset: (x: 20mm, y: 28mm), {
+    set text(font: t.display-font)
+    set par(justify: false, first-line-indent: 0em)
+    place(top + right, dx: 20mm, dy: 16mm,
+      block(width: 96mm, height: 168mm, clip: true, cover-pattern(96mm, 168mm)))
+    text(font: t.sans-font, size: 8pt, weight: "bold", tracking: 0.08em,
+      fill: navy-700, "LBIZ PARTNERS  ·  FAMILY CORPORATION")
+    v(7mm)
+    text(size: 82pt, weight: "extrabold", tracking: -0.04em, fill: navy-500, numpad(n))
+    v(12mm)
+    text(size: 28pt, weight: "extrabold", tracking: -0.02em, fill: navy-900, keep-words(title))
+    v(9mm)
+    rect(width: 38mm, height: 3pt, fill: accent)
+    if summary != none {
+      v(6mm)
+      set text(size: 11pt, weight: "regular", fill: ink-60)
+      set par(leading: 0.7em, justify: false)
+      block(width: 78%, summary)
+    }
+    place(bottom + left, dy: -4mm,
+      text(font: t.sans-font, size: 8pt, fill: ink-60,
+        meta.at("series", default: "이상수의 법인전환 판단실") + "  ·  " + meta.at("slogan", default: "")))
+  }))
+}
+
 #let biz-tbl = counter("biz-tbl")
 #let biz-fig = counter("biz-fig")
 
@@ -172,7 +381,10 @@
   } else {
     biz-tbl.update(0)
     biz-fig.update(0)
-    base.chapter(title, summary: summary, t: TT, opener: biz-opener)
+    base.chapter(title, summary: summary, t: TT,
+      opener: if brand-editorial { branded-opener }
+        else if light-editorial { light-opener }
+        else { biz-opener })
   }
 }
 
@@ -244,11 +456,12 @@
     let lc = if kind == "warn" { alert-c } else { navy-700 }
     block(
       width: 100%, breakable: false,
-      fill: paper-alt, stroke: 0.5pt + navy-100, inset: 6mm,
+      fill: if kind == "example" { white } else { paper-alt },
+      stroke: 0.5pt + navy-100, inset: 6mm,
       {
         text(font: TT.sans-font, size: 8pt, tracking: 0.06em, weight: "bold", fill: lc, upper(label))
         v(2.5mm)
-        set text(size: 9.5pt)
+        set text(size: 9.5pt, fill: if kind == "example" { navy-700 } else { ink })
         set par(leading: 0.6em, spacing: 0.8em)
         body
       })
@@ -361,11 +574,13 @@
         if im.at("phone", default: none) != none { rows.push(("전화", im.phone)) }
         if im.at("email", default: none) != none { rows.push(("이메일", im.email)) }
         if im.at("site", default: none) != none { rows.push(("홈페이지", im.site)) }
-        grid(columns: rows.len(), column-gutter: 8mm, ..rows.map(r => {
-          text(font: TT.sans-font, size: 7.5pt, tracking: 0.06em, fill: ink-60, r.at(0))
-          linebreak()
-          text(font: TT.sans-font, size: 9.5pt, weight: "semibold", fill: navy-900, r.at(1))
-        }))
+        if rows.len() > 0 {
+          grid(columns: rows.len(), column-gutter: 8mm, ..rows.map(r => {
+            text(font: TT.sans-font, size: 7.5pt, tracking: 0.06em, fill: ink-60, r.at(0))
+            linebreak()
+            text(font: TT.sans-font, size: 9.5pt, weight: "semibold", fill: navy-900, r.at(1))
+          }))
+        }
         if im.at("note", default: none) != none {
           v(3mm)
           text(font: TT.sans-font, size: 7.5pt, fill: ink-60, im.note)
@@ -396,48 +611,237 @@
   })
 }
 
+// ---- LBiz branded closing page: source / recheck list ----------------------
+#let source-list(meta, t) = {
+  let product-guide = meta.at("source_list_mode", default: "") == "product-guide"
+  let investment-association = meta.at("source_list_mode", default: "") == "investment-association"
+  let medical-mso = meta.at("source_list_mode", default: "") == "medical-mso"
+  let notice = meta.at("disclaimer", default:
+    if investment-association {
+      "본 자료는 개인투자조합의 등록·운영·청산을 이해하기 위한 일반 안내입니다. 실제 접수·투자·분배·세무 신고 전에는 최신 공식 서식과 조합별 사실관계를 변호사·세무사·회계사 및 접수기관과 확인하십시오."
+    } else if medical-mso {
+      "본 자료는 의료기관 경영지원 구조를 이해하기 위한 교육·실무 보조 자료입니다. 실제 설립·계약·세무·노무·개인정보·의료광고 판단 전에는 최신 원문과 기관별 사실관계를 자격사와 확인하십시오."
+    } else {
+      "본 자료는 일반 안내이며 개별 자문을 대신하지 않습니다. 실제 적용 전에는 최신 원문과 회사별 사실관계를 전문가와 확인하십시오."
+    })
+  pagebreak(weak: true)
+  page(header: none, footer: none, background: none, fill: ivory, {
+    set text(font: t.body-font, size: 8.8pt, fill: ink, lang: "ko", region: "KR")
+    set par(justify: false, first-line-indent: 0em, leading: 0.62em, spacing: 0.72em)
+    text(font: t.display-font, size: 18pt, weight: "bold", fill: navy-900,
+      "출처·확인 필요 목록 (독자용)")
+    v(2mm)
+    line(length: 42mm, stroke: 1pt + accent)
+    v(5mm)
+    text(font: t.sans-font, size: 8.7pt, fill: ink,
+      if product-guide {
+        "아래는 본문에서 참조한 Claude 공식 문서와 실제 앱 화면, 그리고 독자가 마지막으로 확인할 항목입니다. 제품명·요금·기능·화면은 계정·운영체제·출시 시점에 따라 달라질 수 있습니다."
+      } else if investment-association {
+        "아래는 본문에서 참조한 개인투자조합 법·시행령·시행규칙·고시·행정 안내와 독자가 조합별로 마지막에 확인할 항목입니다. 법령·서식·접수창구는 신청일에 국가법령정보센터와 담당기관에서 다시 확인하십시오."
+      } else if medical-mso {
+        "아래는 본문에서 참조한 의료·세무·노무·개인정보·의료광고 관련 법령과 정부 안내, 그리고 MSO 운영자가 마지막에 확인할 항목입니다. 실제 적용 전에는 국가법령정보센터와 관계기관의 최신 원문을 다시 확인하십시오."
+      } else {
+        "아래는 본문에서 참조한 법·제도와 대표님이 마지막으로 확인할 항목입니다. 법령 원문은 국가법령정보센터(law.go.kr)에서 법령명과 조문으로 다시 확인할 수 있습니다."
+      })
+    v(3mm)
+    block(width: 100%, fill: white, stroke: 0.5pt + rule-c, inset: (x: 5mm, y: 4mm), {
+      text(font: t.sans-font, size: 8pt, weight: "bold", fill: navy-700,
+        if product-guide { "본문의 핵심 근거" } else { "본문의 핵심 근거" })
+      v(2mm)
+      if product-guide {
+        text(size: 8.2pt, fill: ink,
+          "· Claude Code 데스크톱 시작·참조 문서(code.claude.com)")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· Claude Cowork 시작·컴퓨터 사용·예약 작업 지원 문서(support.claude.com)")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 권한 모드·메모리·MCP·기능 개요 공식 문서")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 실제 Claude 데스크톱 설정 화면 관찰·주석 캡처(2026-09-12)")
+      } else if investment-association {
+        text(size: 8.2pt, fill: ink,
+          "· 벤처투자 촉진에 관한 법률 제12조·제13조·제18조·제19조·제22조 현행 원문")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 같은 법 시행령 제6조·제7조·제8조·제10조 및 시행규칙 제5조·제9조·별지 서식")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 개인투자조합 등록 및 투자확인서 발급규정과 정부24 민원 안내")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 조세특례제한법 제16조와 국세법령정보시스템의 사실관계별 세무 검토 창구")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 2026-09-15 집필팀이 확인한 공식 출처 목록과 법령 재확인 기록")
+      } else if medical-mso {
+        text(size: 8.2pt, fill: ink,
+          [· 의료법 제33·56·57조: #link("https://law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1032064215")[국가법령정보센터 제57조 원문]에서 광고 기준 확인])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 개인정보 보호법 제23·26·34조, 시행령 제39·39의2·40조: #link("https://law.go.kr/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1020399009")[제26조 원문]에서 법령명·조문 검색])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 법인세법 제52·116조, 부가가치세법 제8·32조: #link("https://www.law.go.kr/법령/법인세법/제52조")[법인세법 제52조]·#link("https://www.law.go.kr/법령/부가가치세법/제32조")[부가가치세법 제32조]와 국세청 안내 대조])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 근로기준법 제17조·파견근로자 보호 관련 법령: #link("https://www.law.go.kr/법령/근로기준법/제17조")[근로기준법 제17조]와 고용노동부 안내 대조])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 집필 확인일 2026-09-15: 의료법·개인정보 보호법 2026-09-11 시행본과 #link("https://pipc.go.kr/np/cop/bbs/selectBoardArticle.do?bbsId=BS074&mCode=C020010000&nttId=12459")[개인정보보호위원회 개정 안내]를 대조; 실제 적용일 다시 확인])
+      } else {
+        text(size: 8.2pt, fill: ink,
+          "· 상법·법인세법·소득세법·상속세 및 증여세법의 현행 원문과 시행령·시행규칙")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 근로기준법·최저임금법·국민연금·국민건강보험·고용보험·산재보험 관계 법령")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 국세청·홈택스·국세법령정보시스템·기획재정부·고용노동부·4대보험 기관 안내")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 2026-09-10 korean-law 원문 조회 및 법령 사실 대장(research/fact-ledger.md)")
+      }
+    })
+    v(4mm)
+    text(font: t.sans-font, size: 8pt, weight: "bold", fill: navy-700,
+      if product-guide { "독자가 작업별로 다시 확인할 항목" } else if investment-association { "조합별로 다시 확인할 항목" } else if medical-mso { "MSO 운영자가 다시 확인할 항목" } else { "대표님이 회사별로 다시 확인할 항목" })
+    v(2mm)
+    if product-guide {
+      text(size: 8.2pt, fill: ink,
+        "· 현재 계정·플랜·운영체제에서 같은 메뉴와 권한이 보이는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· Local·Remote·Cloud·SSH 중 실제 실행 위치가 어디인가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 폴더·프로젝트·커넥터·MCP의 읽기·쓰기·공유 범위가 맞는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 공식 문서의 최신 변경과 실제 화면의 차이를 확인했는가")
+    } else if investment-association {
+      text(size: 8.2pt, fill: ink,
+        "· GP·LP·조합원 수·출자좌수·존속기간·GP 출자비율이 현행 요건과 맞는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 결성총회 의사록·규약·명부·출자이행·잔액증명과 최신 공식 첨부목록을 대조했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 등록 후 투자의무·관계인 거래·보고·변경등록·청산 일정과 증거 보관 위치를 정했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 투자확인서·소득공제·분배·보수·원천징수의 조합별 세무 쟁점을 전문가에게 전달했는가")
+    } else if medical-mso {
+      text(size: 8.2pt, fill: ink,
+        "· 의료기관과 MSO의 소유·자금·진료·인사·광고 책임이 실제 행동에서도 분리되는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 서비스계약·가격 산정·요청·승인·검수·세금계산서·이체가 거래별로 이어지는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 직원의 고용주·지휘자·급여 책임과 환자·직원정보 접근권한이 명확한가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 의료광고·환자 유입·사고 대응에 필요한 최신 기준과 자격사 검토를 확인했는가")
+    } else {
+      text(size: 8.2pt, fill: ink,
+        "· 법인 형태·결산월·주주명부·임원등기와 실제 의사결정 권한")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 가족 구성원별 실제 업무·근무시간·지휘감독·보수·지급일과 신고 흔적")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 회사 카드·대여·임대차·용역 등 가족 간 거래의 목적·시가·계약·이행")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 승계·증여·상속의 적용일, 신고·납부일, 경영·고용·자산 사후관리 조건")
+    }
+    v(4mm)
+    block(width: 100%, fill: paper-alt, inset: (x: 5mm, y: 4mm), {
+      text(font: t.sans-font, size: 8pt, weight: "bold", fill: alert-c, "주의")
+      v(2mm)
+      text(size: 8.2pt, fill: ink,
+        notice)
+    })
+    v(1fr)
+    block(width: 100%, {
+      line(length: 100%, stroke: 0.4pt + rule-c)
+      v(2mm)
+      text(font: t.sans-font, size: 6.2pt, fill: navy-700,
+        "본 자료는 저작권법의 보호를 받습니다. " +
+        meta.at("publisher", default: "엘비즈파트너스") +
+        "의 사전 서면 동의 없이 무단 복제·배포·전송·게시·공유하는 행위를 금합니다.")
+      v(1mm)
+      text(font: t.sans-font, size: 7pt, fill: ink-60,
+        "상담·강의 보조")
+      h(1fr)
+      text(font: t.sans-font, size: 7pt, fill: ink-60,
+        meta.at("title", default: "가족법인 실무백서") + " · 출처·확인 필요 목록")
+    })
+  })
+}
+
 // ---- 마스터 래퍼 -------------------------------------------------------------
 #let book(meta: (:), tokens: (:), cover: none, toc: true, toc-title: "차례", body) = {
   let t = TT
-  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "엘비즈파트너스"))
+  set document(title: meta.at("title", default: "무제"), author: meta.at("author", default: "이상수"))
   set page(
     width: t.trim.w, height: t.trim.h,
     margin: (top: t.margin.top, bottom: t.margin.bottom, left: t.margin.left, right: t.margin.right),
+    fill: if brand-editorial { ivory } else { white },
     // 러닝헤드 하단(헤어라인) = 판면 상단 위 6mm → 텍스트 베이스라인 ≈ 8mm (STYLE 러닝 시스템)
     header-ascent: 6mm,
     header: context {
       let prev = query(heading.where(level: 1).before(here()))
       if prev.len() > 0 {
-        set text(font: t.sans-font, size: 8pt, tracking: 0.06em, fill: ink-60)
+        set text(font: t.sans-font,
+          size: if brand-editorial { 7.2pt } else { 8pt },
+          tracking: if brand-editorial { 0.04em } else { 0.06em }, fill: ink-60)
         let n = chapter-state.get().num
-        if n > 0 { numpad(n); h(0.6em) }  // 좌측 = {장번호} {장 제목}
-        prev.last().body
+        if n > 0 {
+          text(weight: "bold", fill: if brand-editorial { accent } else { ink-60 }, numpad(n))
+          h(0.6em)
+        }
+        text(weight: "medium", fill: ink-60, prev.last().body)
         h(1fr)
-        meta.at("title", default: "")
-        v(1.2mm)  // 베이스라인(판면 -8mm)과 헤어라인(-6mm) 간격 2mm — 디센트 0.6mm 감안
+        text(weight: "bold", fill: navy-700, meta.at("title", default: ""))
+        v(1.2mm)  // 베이스라인과 헤어라인 사이 여백
         line(length: 100%, stroke: 0.4pt + rule-c)
       }
     },
     footer: context {
-      // H1이 실린 면(도비라·Exec Summary 첫 면)은 쪽번호 미표기 (러닝 시스템 규약)
       let pg = here().page()
       let h1-here = query(heading.where(level: 1)).filter(h => h.location().page() == pg)
       if h1-here.len() == 0 {
-        align(right, text(font: t.sans-font, size: 9pt, weight: "medium", fill: navy-700,
-          str(counter(page).get().first())))
+        if brand-editorial {
+          set text(font: t.sans-font, size: 7.2pt, fill: ink-60)
+          text(weight: "medium", meta.at("publisher", default: "엘비즈파트너스") + " · " +
+            meta.at("date", default: "2026-09"))
+          h(1fr)
+          text(weight: "bold", fill: navy-700, str(counter(page).get().first()))
+        } else {
+          align(right, text(font: t.sans-font, size: 9pt, weight: "medium", fill: navy-700,
+            str(counter(page).get().first())))
+        }
       }
     },
     background: context {
-      // 섹션 탭: 재단선 안쪽 8mm(x0=186mm), 도비라·ES 면에는 그리지 않는다(유령 탭 방지)
-      let n = chapter-state.get().num
-      let pg = here().page()
-      let h1-here = query(heading.where(level: 1)).filter(h => h.location().page() == pg)
-      if n > 0 and h1-here.len() == 0 {
-        place(top + right, dx: -8mm, dy: 28mm + (n - 1) * 26mm,
-          rect(width: 6mm, height: 24mm, fill: navy-500, {
-            align(center + horizon, text(font: t.sans-font, size: 8pt, weight: "bold",
-              fill: white, numpad(n)))
-          }))
+      if not brand-editorial {
+        // 섹션 탭: 재단선 안쪽 8mm, 도비라·ES 면에는 그리지 않는다.
+        let n = chapter-state.get().num
+        let pg = here().page()
+        let h1-here = query(heading.where(level: 1)).filter(h => h.location().page() == pg)
+        if n > 0 and h1-here.len() == 0 {
+          place(top + right, dx: -8mm, dy: 28mm + (n - 1) * 26mm,
+            rect(width: if light-editorial { 3mm } else { 6mm },
+              height: if light-editorial { 18mm } else { 24mm },
+              fill: if light-editorial { accent } else { navy-500 }, {
+              align(center + horizon, text(font: t.sans-font,
+                size: if light-editorial { 6.5pt } else { 8pt }, weight: "bold",
+                fill: if light-editorial { navy-900 } else { white }, numpad(n)))
+            }))
+        }
       }
     },
   )
@@ -449,7 +853,8 @@
   show heading.where(level: 2): it => {
     v(1.8em, weak: true)
     block(sticky: true, {
-      text(font: t.sans-font, size: 16pt, weight: "bold", tracking: -0.01em, fill: navy-900, it.body)
+      text(font: t.sans-font, size: if brand-editorial { 14pt } else { 16pt },
+        weight: "bold", tracking: -0.01em, fill: navy-900, it.body)
       v(2.2mm)
       line(length: 100%, stroke: 0.8pt + navy-700)
     })
@@ -457,7 +862,9 @@
   }
   show heading.where(level: 3): it => {
     v(1.5em, weak: true)
-    block(sticky: true, text(font: t.sans-font, size: 12pt, weight: "semibold", fill: navy-700, it.body))
+    block(sticky: true, text(font: t.sans-font,
+      size: if brand-editorial { 10.5pt } else { 12pt },
+      weight: "semibold", fill: navy-700, it.body))
     v(0.6em, weak: true)
   }
   set heading(numbering: none)
@@ -475,7 +882,7 @@
   // 표: 세로 괘선·얼룩말 금지, navy 상하 굵은 룰
   set table(stroke: none, inset: (x: 3mm, y: 2.6mm), fill: none)
   show table: it => {
-    set text(size: 9pt, font: t.sans-font)
+    set text(size: if brand-editorial { 8.5pt } else { 9pt }, font: t.sans-font)
     block(breakable: false, {
       it
     })
@@ -486,7 +893,7 @@
   ))
   show table.cell.where(y: 0): it => text(weight: "semibold", fill: navy-900, it)
   show table.cell: set align(left + horizon)
-  show link: it => text(fill: navy-500, it)
+  show link: it => text(fill: if brand-editorial { navy-700 } else { navy-500 }, it)
   show figure.caption: it => text(font: t.sans-font, size: 8pt, fill: ink-60, it)
 
   if cover != none { cover }
@@ -584,7 +991,8 @@
         let avail = t.trim.h - t.margin.top - t.margin.bottom
 
         // 장·절 수집 (2단계까지, 항 제외)
-        let hs = query(heading).filter(h => h.level <= 2 and h.outlined)
+        let toc-levels = meta.at("toc_levels", default: 2)
+        let hs = query(heading).filter(h => h.level <= toc-levels and h.outlined)
         let entries = ()
         for h in hs {
           let p = counter(page).at(h.location()).first()

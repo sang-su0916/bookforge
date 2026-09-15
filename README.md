@@ -77,10 +77,14 @@
 | `insight` | 기술 동향 리포트 (연구기관 인사이트) | 182×257 | HTML→Chromium |
 | `academic` | 학술 단행본 (신국판·3선표·절 번호 위계) | 153×225 | Typst |
 | `essay` | 미니멀 에세이 (사륙판·먹 1도+포인트 1색) | 128×188 | Typst |
-| `business` | 컨설팅 백서 (navy 시스템·액션 타이틀·키 스탯) | 200×280 | Typst |
+| `business` | 컨설팅 백서·**기본 LBiz 편집형** (navy 시스템·액션 타이틀·키 스탯) | 200×280 (브랜디드 기본은 A5 148×210) | Typst |
 | `magazine` | 트렌드 매거진 (에디토리얼 그리드·풀퀘트 면) | 200×265 | HTML→Chromium |
 
 `practical`은 표지도 카탈로그입니다 — 기본은 백지 위 오버사이즈 고스트 숫자의 `numeral`이고, `book.json`의 `cover_variant`로 `ribbon`(구 기본)·`block`·`grid`·`obi`를 옵트인할 수 있습니다. 카탈로그 밖 값은 침묵 폴백 없이 즉시 실패합니다.
+
+## 브랜드 프로필
+
+이 설치본의 기본 출력은 `business` + `brand_profile: "lbiz-partners"` + `layout_profile: "lbiz-editorial-branded"`입니다. LBiz Partners의 네이비·아이보리·골드 시스템, `L-BIZ PARTNERS` 로고, `이상수의 법인전환 판단실` 시리즈 정보와 판권 프로필을 표지·본문·끝면에 연결하고, A5 아이보리 지면과 좌측 정렬 표지, 상단 좌측 로고·워드마크, 장 시작 일러스트, 하단 연락·저작권 푸터를 사용합니다. `scaffold.py`는 새 기본 책에 이 값을 기록하고, `build.py`는 값이 빠진 기존 `business` manifest에도 같은 기본값을 보강합니다. `layout_profile` 또는 다른 `style`·브랜드를 명시하면 그 선택을 우선하며, 기본값은 기존 명시 설정을 덮어쓰지 않습니다. 이 프로필의 장 도비라 일러스트는 `build.py`가 `brand-assets/`에서 책 프로젝트 `assets/`로 자동 공급합니다. `build.py`가 프로필과 물리 토큰을 함께 해석하고 로고를 프로젝트 `assets/`로 고정한 뒤, G16-TOKENS와 실제 Typst 조판에 같은 메타데이터를 전달합니다. 책 단위 값은 프로필보다 우선하며, 수정본 산출물은 `output_slug`로 기존 파일과 분리합니다.
 
 ## 설치
 
@@ -115,7 +119,7 @@ ln -sfn "$PWD" ~/.agents/skills/bookforge
 스킬이 모드를 감지하고 스타일·분량을 정해 끝까지 진행합니다. 도해가 필요한 장은 `diagrams/fig-NN.json`(antv) 또는 `diagrams/fig-NN.svg`(authored)을 두면 빌드 단계에서 자동으로 프리렌더됩니다. 수동 실행도 가능합니다:
 
 ```bash
-python3 scripts/scaffold.py mybook --style essay --title "제목" --length short
+python3 scripts/scaffold.py mybook --title "제목" --length short
 # chapters/*.md 와 outline.json 작성 후
 python3 scripts/build.py mybook        # → draft/book.pdf (도해가 있으면 여기서 자동 프리렌더)
 python3 scripts/qc_gate.py mybook      # 게이트 통과 시에만 → final/mybook.pdf
@@ -155,6 +159,8 @@ SKILL.md            라우터 (모드 감지 → 파이프라인 → 서브 문�
 AGENTS.md           세션 모드 이원화 (스킬 사용 vs 메인테이너)
 modes/              topic.md · manuscript.md
 styles/<6종>/       STYLE.md(규칙서) + theme.typ|theme.css + tokens.json
+brands/             브랜드 프로필 JSON
+brand-assets/       프로필이 공유하는 로고·브랜드 자산
 templates/base.typ  Typst 공통 북 프리미티브
 vendor/             antv-ssr.bundle.mjs(커밋된 AntV SSR 번들 — 오프라인 재현성) + build-bundle.mjs
 scripts/            scaffold · build(+G16-TOKENS) · build_html(다면 목차 2패스) · qc_gate ·

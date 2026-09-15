@@ -77,10 +77,14 @@ Each style ships a rulebook (`styles/*/STYLE.md`) distilled from measurements of
 | `insight` | tech trend report (research-institute insight) | 182×257 | HTML→Chromium |
 | `academic` | scholarly monograph (three-rule tables, numbered section hierarchy) | 153×225 | Typst |
 | `essay` | minimal essays (single ink + one accent color) | 128×188 | Typst |
-| `business` | consulting white paper (navy system, action titles, key stats) | 200×280 | Typst |
+| `business` | consulting white paper, **default LBiz editorial** (navy system, action titles, key stats) | 200×280 (A5 148×210 with branded default) | Typst |
 | `magazine` | trend magazine (editorial grid, pull-quote pages) | 200×265 | HTML→Chromium |
 
 `practical` covers are a catalog too — the default is `numeral` (an oversized ghost numeral on white), and `cover_variant` in `book.json` opts into `ribbon` (the former default), `block`, `grid`, or `obi`. A value outside the catalog fails immediately with no silent fallback.
+
+## Default branded template
+
+Unless another style or template is explicitly requested, new books use `business` with `brand_profile: "lbiz-partners"` and `layout_profile: "lbiz-editorial-branded"`: an A5 ivory page, left-aligned cover, top-left LBiz wordmark, navy body text, gold accents, illustrated chapter openers, and a source/check-needed closing page. `scaffold.py` writes these defaults for new business books, and `build.py` backfills them when they are absent from a business manifest. Explicit style, brand, or layout fields always take precedence.
 
 ## Install
 
@@ -115,7 +119,7 @@ Just tell the agent:
 The skill detects the mode, picks style and length, and runs to completion. For chapters that need diagrams, drop `diagrams/fig-NN.json` (antv) or `diagrams/fig-NN.svg` (authored) and the build prerenders them automatically. Manual runs also work:
 
 ```bash
-python3 scripts/scaffold.py mybook --style essay --title "Title" --length short
+python3 scripts/scaffold.py mybook --title "Title" --length short
 # write chapters/*.md and outline.json, then
 python3 scripts/build.py mybook        # → draft/book.pdf (diagrams prerender here)
 python3 scripts/qc_gate.py mybook      # only on pass → final/mybook.pdf
