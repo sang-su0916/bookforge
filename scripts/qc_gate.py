@@ -338,13 +338,15 @@ def g0_svg_check(book_dir, outline):
     return problems
 
 
-def g15_print_residue_check(page_texts):
+def g15_print_residue_check(page_texts, code_text=""):
     """인쇄면에 마크다운 기호가 그대로 남았는가. 소스가 문법상 정상이어도
-    변환기가 강조를 걸지 못하면 기호가 글자로 인쇄된다 — 인쇄면에서만 잡힌다."""
+    변환기가 강조를 걸지 못하면 기호가 글자로 인쇄된다 — 인쇄면에서만 잡힌다.
+    code_text: 원고의 코드 블록·인라인 코드를 공백 없이 이은 것. 그 안에 그대로 있는 줄은
+    정상 인쇄다(예: 'Read(./node_modules/**)', '010-****-1234' — CC101 실측 오탐)."""
     problems = []
     for i, t in enumerate(page_texts, 1):
         for line in t.split("\n"):
-            if "**" in line:
+            if "**" in line and not (code_text and re.sub(r"\s+", "", line) in code_text):
                 problems.append(f"p{i}: 굵게 표시 기호가 인쇄됨 — '{line.strip()[:40]}…'")
                 break
     return problems
@@ -904,7 +906,14 @@ def main():
     doc.close()
 
     # ---- G13 figtext (도해 라벨의 PDF 실텍스트 실재 — G11 anchor와 동일 패턴) ----
-    g15pr = g15_print_residue_check(page_texts)
+    _code = []
+    for ch in outline["chapters"]:
+        _p = book_dir / "chapters" / ch["file"]
+        if _p.exists():
+            _src = _p.read_text(encoding="utf-8")
+            _code += [m.group(2) for m in re.finditer(r"(?ms)^(```|~~~)[^\n]*\n(.*?)^\1[ \t]*$", _src)]
+            _code += re.findall(r"`([^`\n]+)`", _src)
+    g15pr = g15_print_residue_check(page_texts, re.sub(r"\s+", "", "\u0001".join(_code)))
     report["gates"]["G15-PRINT"] = {"problems": g15pr, "ok": not g15pr}
     if g15pr:
         finish(book_dir, report, ["G15-PRINT: " + p for p in g15pr])
