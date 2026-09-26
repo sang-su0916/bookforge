@@ -243,8 +243,11 @@ def g15_md_check(book_dir, outline):
         p = book_dir / "chapters" / ch["file"]
         if not p.exists():
             continue
-        for para in re.split(r"\n\s*\n", p.read_text(encoding="utf-8")):
-            if para.count("**") % 2 == 1:
+        # 코드 블록·인라인 코드 안의 ** 는 글자 그대로 찍히는 게 정상이다
+        # (예: "Read(./node_modules/**)" — CC101 ch-21 오탐). 빼고 센다.
+        src = re.sub(r"(?ms)^(```|~~~).*?^\1[ \t]*$", "", p.read_text(encoding="utf-8"))
+        for para in re.split(r"\n\s*\n", src):
+            if re.sub(r"`[^`\n]*`", "", para).count("**") % 2 == 1:
                 problems.append(f"{ch['file']}: 굵게 표시(**) 짝이 맞지 않는 단락 "
                                 f"— '{para.strip()[:28]}…' (기호가 그대로 인쇄된다)")
     return problems
@@ -1377,7 +1380,11 @@ def main():
     DUP_FAIL, DUP_WARN = 32, 24
     g19 = {"ok": True, "problems": [], "warns": [], "measured": {"pages_scanned": 0, "pages_hit": 0}}
     for _i, _raw in enumerate(page_texts):
-        _s = "\n".join(l for l in _raw.split("\n") if not l.strip().startswith("자료:"))
+        #    URL도 뺀다 — 참고문헌은 같은 사이트 주소 앞부분(https://help.openai.com/en/articles/)을
+        #    줄마다 공유해 44자 반복으로 FAIL 됐다(GPTs 가이드 p68 실측 오탐).
+        _s_lines = [re.sub(r"https?://\S+", "", l) for l in _raw.split("\n")
+                    if not l.strip().startswith("자료:")]
+        _s = "\n".join(_s_lines)
         _s = re.sub(r"\s+", "", _s)
         _s = re.sub(r"[_]{2,}|\[[^\]]{1,12}\]|[□▮☐]+", "", _s)
         g19["measured"]["pages_scanned"] += 1
@@ -1402,7 +1409,7 @@ def main():
             (g19["problems"] if _L >= DUP_FAIL else g19["warns"]).append(_msg)
         # ── 짧아도 확실한 두 가지. 위 임계(32자)는 안전을 위해 높게 잡혀 있어
         #    "…면제받았다면거래 규모가 작아 그 제출의무를 면제받은"(16자) 같은 접합을 놓친다.
-        #    아래 둘은 실측상 오탐이 0인 형태만 잡는다.
+        #    ①은 FAIL, ②는 재조판 실측에서 오탐이 많아 WARN(아래 주석).
         #    ① 마침표 바로 뒤의 쉼표 — 새 문장을 끼우고 옛 꼬리를 남긴 흔적.
         for _m in re.finditer(r"[가-힣]\.\s*,", _raw):
             g19["problems"].append(
@@ -1411,18 +1418,45 @@ def main():
         #    ② 바로 붙어 있는 반복(14자 이상, 사이가 4자 이내). 14자 아래로 내리면
         #       '같은 법 시행령 제34조의5 제4항) / 같은 법 시행령 제34조의5 제6항'처럼
         #       이웃 항을 잇달아 인용한 정상 문장이 걸린다(실측 오탐).
+        #    이 규칙에서만 빼는 줄 — 재조판 실측(2026-09-26, 9월 발행 3권)에서 정상 반복이었던 둘:
+        #      · 그림·표 캡션 줄: 캡션 제목이 바로 아래 도해 안의 제목으로 한 번 더 찍힌다.
+        #      · 서식 빈칸 줄(____): '발기인 A의 인수 주식… / 발기인 B의 인수 주식…'처럼
+        #        응답자마다 같은 항목명이 줄지어 선다.
+        #      · 글머리표 목록 줄: 참고자료 목록이 '업무무관 가지급금의 범위 / 업무무관가지급금의
+        #        대손금…'처럼 앞머리를 공유한다. (빈칸은 PDF에서 따로 한 줄로 뽑히므로 빈칸 줄의
+        #        바로 위아래 줄도 서식 줄로 본다.) 이 줄들도 위의 32자 규칙은 그대로 받는다.
+        _blank = [bool(re.fullmatch(r"\s*_{4,}\s*", l)) for l in _s_lines]
+        _keep2 = []
+        for _k, l in enumerate(_s_lines):
+            if (re.match(r"\s*[\[<]?(그림|표)\s*\d", l) or "____" in l
+                    or re.match(r"\s*[•·▪◦‣∙-]\s", l)
+                    or (_k > 0 and _blank[_k - 1]) or (_k + 1 < len(_s_lines) and _blank[_k + 1])):
+                continue
+            _keep2.append(l)
+        _s2 = re.sub(r"\s+", "", "\n".join(_keep2))
+        _s2 = re.sub(r"[_]{2,}|\[[^\]]{1,12}\]|[□▮☐]+", "", _s2)
         _K = 14
         _seen2 = {}
-        for _j in range(len(_s) - _K + 1):
-            _g2 = _s[_j:_j + _K]
+        for _j in range(len(_s2) - _K + 1):
+            _g2 = _s2[_j:_j + _K]
             _a2 = _seen2.get(_g2)
             if _a2 is not None:
                 _L2 = _K
-                while _a2 + _L2 < _j and _j + _L2 < len(_s) and _s[_a2 + _L2] == _s[_j + _L2]:
+                while _a2 + _L2 < _j and _j + _L2 < len(_s2) and _s2[_a2 + _L2] == _s2[_j + _L2]:
                     _L2 += 1
-                if 0 <= _j - (_a2 + _L2) <= 4:
-                    g19["problems"].append(
-                        f"p{_i + 1}: {_L2}글자가 바로 뒤에 다시 인쇄됨 — 「{_s[_a2:_j + _L2][:70]}…」")
+                #    한글 문장 조각만 본다 — 표는 칸마다 같은 영문 용어가 줄지어 서서
+                #    'Instructions파일 … Instructions파일'(14자)이 이웃 행에 붙어 찍힌다
+                #    (GPTs 가이드 p39 실측 오탐). 이 규칙이 노리는 접합 흔적은 한글 본문이다.
+                #    법령명 나열('○○법 제12조, ○○법 시행령 제6조, ○○법 시행규칙…')도 정상 반복이다.
+                _frag2 = _s2[_j:_j + _L2]
+                if (0 <= _j - (_a2 + _L2) <= 4
+                        and len(re.findall(r"[가-힣]", _frag2)) * 2 >= len(_frag2)
+                        and not re.search(r"에관한법률|법시행령|법시행규칙|법률시행", _frag2)):
+                    #    FAIL 이 아니라 WARN — 9월 발행 5권 재조판(2026-09-26)에서 이 규칙은 정상
+                    #    반복(캡션·서식·목록·법령명·'④ 민준의 1,000주… ⑤ 서연의 1,000주…' 나열)을
+                    #    7유형 넘게 잡았고 진짜 접합은 0건이었다. 32자 규칙과 ①은 그대로 FAIL.
+                    g19["warns"].append(
+                        f"p{_i + 1}: {_L2}글자가 바로 뒤에 다시 인쇄됨(육안 확인) — 「{_s2[_a2:_j + _L2][:70]}…」")
                     break
             else:
                 _seen2[_g2] = _j

@@ -18,6 +18,37 @@ from markdown_it import MarkdownIt
 
 MD = MarkdownIt("commonmark").enable("table").enable("strikethrough")
 
+# CommonMark 강조 규칙은 닫는 `**` 앞이 문장부호이고 뒤가 글자면 닫지 못한다.
+# 한국어는 조사가 바로 붙으므로 `**[누구]**가`·`**보였는가?**를`·`**"직원"**이라고`
+# 가 굵게가 안 되고 `**` 가 인쇄면에 그대로 찍힌다(G15-PRINT 가 잡은 실사례).
+# `*` 구분자에 한해 앞뒤 한중일 글자를 문장부호처럼 취급해 조사 결합을 허용한다
+# (markdown-cjk-friendly 와 같은 방향). `_`·`~` 는 영문 식별자 오판을 막으려 그대로 둔다.
+from markdown_it.rules_inline.state_inline import StateInline, Scanned
+from markdown_it.common.utils import isWhiteSpace, isPunctChar, isMdAsciiPunct
+
+_CJK_RE = re.compile(r"[ᄀ-ᇿ぀-ヿ㄰-㆏㐀-䶿一-鿿가-힣豈-﫿]")
+_orig_scan = StateInline.scanDelims
+
+
+def _cjk_scan(self, start, canSplitWord):
+    if self.src[start] != "*":
+        return _orig_scan(self, start, canSplitWord)
+    pos, maximum = start, self.posMax
+    last = self.src[start - 1] if start > 0 else " "
+    while pos < maximum and self.src[pos] == "*":
+        pos += 1
+    nxt = self.src[pos] if pos < maximum else " "
+    lp = isMdAsciiPunct(ord(last)) or isPunctChar(last) or bool(_CJK_RE.match(last))
+    np_ = isMdAsciiPunct(ord(nxt)) or isPunctChar(nxt) or bool(_CJK_RE.match(nxt))
+    lw, nw = isWhiteSpace(ord(last)), isWhiteSpace(ord(nxt))
+    left = not (nw or (np_ and not (lw or lp)))
+    right = not (lw or (lp and not (nw or np_)))
+    return Scanned(left and (canSplitWord or not right or lp),
+                   right and (canSplitWord or not left or np_), pos - start)
+
+
+StateInline.scanDelims = _cjk_scan
+
 ESC = "\\`#$&_*@<>[]~^"
 
 def esc(text: str) -> str:
