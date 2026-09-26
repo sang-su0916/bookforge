@@ -236,6 +236,20 @@ def g15_para_check(book_dir, outline, style):
     return problems
 
 
+def g15_md_check(book_dir, outline):
+    """단락 안에서 굵게 표시(**)의 짝이 맞는지. 짝이 깨지면 기호가 그대로 인쇄된다."""
+    problems = []
+    for ch in outline["chapters"]:
+        p = book_dir / "chapters" / ch["file"]
+        if not p.exists():
+            continue
+        for para in re.split(r"\n\s*\n", p.read_text(encoding="utf-8")):
+            if para.count("**") % 2 == 1:
+                problems.append(f"{ch['file']}: 굵게 표시(**) 짝이 맞지 않는 단락 "
+                                f"— '{para.strip()[:28]}…' (기호가 그대로 인쇄된다)")
+    return problems
+
+
 def g15_drought_check(pages, page_texts, first_ch, structural, style):
     """시각 요소(도해·표·박스·키 스탯 디스플레이) 없는 연속 본문 면 상한."""
     limit = G15_DROUGHT_MAX.get(style)
@@ -252,7 +266,10 @@ def g15_drought_check(pages, page_texts, first_ch, structural, style):
         txt = page_texts[pg - 1]
         visual = (p["imgarea"] >= 0.02 or p.get("vecarea", 0) >= 0.02
                   or any(l["size"] >= 20 for l in p["_lines"])
-                  or "<표" in txt or "[그림" in txt)
+                  # 그림 라벨은 스타일에 따라 꺾쇠(<그림 N-M>)와 대괄호([그림 N-M])를
+                  # 모두 쓴다. 한쪽만 보면 라벨 표기를 바꾼 순간 그림 면을 순텍스트로
+                  # 오판해 이 축이 거짓 실패를 낸다.
+                  or "<표" in txt or "<그림" in txt or "[그림" in txt)
         if visual:
             if len(run) > limit:
                 problems.append(f"연속 순텍스트 본문 {len(run)}면 {run} > {limit}면")
@@ -315,6 +332,18 @@ def g0_svg_check(book_dir, outline):
         elif "<text" not in svg and "<foreignObject" not in svg:
             # 수동 SVG(사이드카 없음)는 외부참조/foreignObject 검사만 — 텍스트 없는 순수 도형 허용
             pass
+    return problems
+
+
+def g15_print_residue_check(page_texts):
+    """인쇄면에 마크다운 기호가 그대로 남았는가. 소스가 문법상 정상이어도
+    변환기가 강조를 걸지 못하면 기호가 글자로 인쇄된다 — 인쇄면에서만 잡힌다."""
+    problems = []
+    for i, t in enumerate(page_texts, 1):
+        for line in t.split("\n"):
+            if "**" in line:
+                problems.append(f"p{i}: 굵게 표시 기호가 인쇄됨 — '{line.strip()[:40]}…'")
+                break
     return problems
 
 
@@ -667,6 +696,10 @@ def main():
 
     # ---- G15-PARA (렌더 전 — 단락 8행 초과는 원고 문제, 빌드보다 먼저 잡는다) ----
     g15p = g15_para_check(book_dir, outline, style)
+    g15md = g15_md_check(book_dir, outline)
+    report["gates"]["G15-MD"] = {"problems": g15md, "ok": not g15md}
+    if g15md:
+        finish(book_dir, report, ["G15-MD: " + p for p in g15md])
     report["gates"]["G15-PARA"] = {"problems": g15p, "ok": not g15p}
     if g15p:
         finish(book_dir, report, ["G15-PARA: " + p for p in g15p])
@@ -868,6 +901,10 @@ def main():
     doc.close()
 
     # ---- G13 figtext (도해 라벨의 PDF 실텍스트 실재 — G11 anchor와 동일 패턴) ----
+    g15pr = g15_print_residue_check(page_texts)
+    report["gates"]["G15-PRINT"] = {"problems": g15pr, "ok": not g15pr}
+    if g15pr:
+        finish(book_dir, report, ["G15-PRINT: " + p for p in g15pr])
     g13 = g13_figtext_check(book_dir, outline, page_texts)
     report["gates"]["G13"] = {"problems": g13, "ok": not g13}
     if g13:
@@ -1328,6 +1365,75 @@ def main():
                                    for p in pages],
                          "chapter_starts": ch_starts, "tails": sorted(tails),
                          "structural_exempt": sorted(structural)}
+
+    # ── G19-DUP — 같은 면에 같은 글이 두 번 인쇄됐는가 (렌더 후, 인쇄면 직접 측정)
+    #    왜 필요한가: 원고를 고칠 때 새 문장을 넣고 옛 문장을 안 지우면 본문이 그대로 두 번
+    #    찍힌다. 이건 문법상 정상이라 마크다운 검사·조판 검사·목차 검사가 전부 통과시킨다.
+    #    실제로 유료 실무서 본문에서 5곳이 이 상태로 게이트를 통과했고, 잡은 것은 육안 검수였다.
+    #    ⚠️ 문장 단위로 세면 안 된다 — PDF는 줄 끝에서 낱말을 쪼개 넣으므로 같은 문장이
+    #       두 번 있어도 글자열로는 한 번만 잡힌다(실측). 공백을 전부 지우고 글자로 센다.
+    #    오탐 방지: 양식 빈칸(____), 자리표시([항목]), 체크박스, 그리고 나뉜 표마다 반복되는
+    #       '자료:' 출처 줄은 검사 대상에서 뺀다. 이 셋이 정상 반복의 전부였다(전수 검토).
+    DUP_FAIL, DUP_WARN = 32, 24
+    g19 = {"ok": True, "problems": [], "warns": [], "measured": {"pages_scanned": 0, "pages_hit": 0}}
+    for _i, _raw in enumerate(page_texts):
+        _s = "\n".join(l for l in _raw.split("\n") if not l.strip().startswith("자료:"))
+        _s = re.sub(r"\s+", "", _s)
+        _s = re.sub(r"[_]{2,}|\[[^\]]{1,12}\]|[□▮☐]+", "", _s)
+        g19["measured"]["pages_scanned"] += 1
+        if len(_s) < DUP_WARN * 2:
+            continue
+        _seen, _best = {}, None
+        for _j in range(len(_s) - DUP_WARN + 1):
+            _g = _s[_j:_j + DUP_WARN]
+            _a = _seen.get(_g)
+            if _a is not None and _j - _a >= DUP_WARN:
+                _L = DUP_WARN
+                while _a + _L < _j and _j + _L < len(_s) and _s[_a + _L] == _s[_j + _L]:
+                    _L += 1
+                if _best is None or _L > _best[0]:
+                    _best = (_L, _s[_a:_a + _L])
+            elif _a is None:
+                _seen[_g] = _j
+        if _best:
+            _L, _frag = _best
+            _msg = f"p{_i + 1}: {_L}글자가 같은 면에 두 번 인쇄됨 — 「{_frag[:60]}…」"
+            g19["measured"]["pages_hit"] += 1
+            (g19["problems"] if _L >= DUP_FAIL else g19["warns"]).append(_msg)
+        # ── 짧아도 확실한 두 가지. 위 임계(32자)는 안전을 위해 높게 잡혀 있어
+        #    "…면제받았다면거래 규모가 작아 그 제출의무를 면제받은"(16자) 같은 접합을 놓친다.
+        #    아래 둘은 실측상 오탐이 0인 형태만 잡는다.
+        #    ① 마침표 바로 뒤의 쉼표 — 새 문장을 끼우고 옛 꼬리를 남긴 흔적.
+        for _m in re.finditer(r"[가-힣]\.\s*,", _raw):
+            g19["problems"].append(
+                f"p{_i + 1}: 마침표 뒤에 쉼표 — 문장을 갈아 끼우고 옛 꼬리가 남은 자리"
+                f" 「…{re.sub(chr(10), ' ', _raw[max(0, _m.start() - 30):_m.start() + 25])}…」")
+        #    ② 바로 붙어 있는 반복(14자 이상, 사이가 4자 이내). 14자 아래로 내리면
+        #       '같은 법 시행령 제34조의5 제4항) / 같은 법 시행령 제34조의5 제6항'처럼
+        #       이웃 항을 잇달아 인용한 정상 문장이 걸린다(실측 오탐).
+        _K = 14
+        _seen2 = {}
+        for _j in range(len(_s) - _K + 1):
+            _g2 = _s[_j:_j + _K]
+            _a2 = _seen2.get(_g2)
+            if _a2 is not None:
+                _L2 = _K
+                while _a2 + _L2 < _j and _j + _L2 < len(_s) and _s[_a2 + _L2] == _s[_j + _L2]:
+                    _L2 += 1
+                if 0 <= _j - (_a2 + _L2) <= 4:
+                    g19["problems"].append(
+                        f"p{_i + 1}: {_L2}글자가 바로 뒤에 다시 인쇄됨 — 「{_s[_a2:_j + _L2][:70]}…」")
+                    break
+            else:
+                _seen2[_g2] = _j
+    # "대상 0개"를 통과로 세지 않는다 — 본문 텍스트가 아예 안 잡혔으면 규칙이 헛돈 것이다.
+    if g19["measured"]["pages_scanned"] == 0:
+        g19["problems"].append("검사할 면이 0개 — 규칙이 아무것도 보지 않았다")
+    g19["ok"] = not g19["problems"]
+    report["gates"]["G19-DUP"] = g19
+    report["warns"] += [f"G19-DUP: {w}" for w in g19["warns"]]
+    if not g19["ok"]:
+        fails += [f"G19-DUP: {p_}" for p_ in g19["problems"]]
 
     # ── G18-COUNT (선택 게이트) — 책이 calc/count_check.py를 갖고 있으면 그것도 판정에 넣는다.
     #    없으면 아무 일도 하지 않으므로 다른 책에는 영향이 없다.

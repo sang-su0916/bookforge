@@ -155,6 +155,15 @@ def prepare_editorial_assets(book_dir: Path, meta: dict):
             if not bundled.is_file():
                 die(f"branded editorial asset missing: {name}")
             shutil.copyfile(bundled, source)
+    # 장별 전용 도비라 이미지(선택): assets/opener-01.png … 이 있으면 그 장에 쓴다.
+    openers = []
+    for idx in range(1, 100):
+        cand = asset_dir / f"opener-{idx:02d}.png"
+        if not cand.is_file():
+            break
+        openers.append(f"../../assets/{cand.name}")
+    if openers:
+        meta["_opener_images"] = openers
 
 
 def load(book_dir: Path):

@@ -116,6 +116,14 @@
           text(font: TT.sans-font, size: 11.5pt, fill: ink-60, keep-words(meta.subtitle))
         }
       })
+      // 표지 아트(선택): 제목 블록과 발행 정보 사이 빈 띠에 가로 밴드로 앉힌다.
+      // assets/cover.png 등이 있을 때만 나타나며, 없으면 기존 순수 조판 표지 그대로다.
+      if meta.at("_cover_art", default: none) != none {
+        place(top + left, dx: 14mm, dy: 98mm,
+          block(width: 120mm, height: 46mm, fill: white, stroke: 0.5pt + rule-c,
+            inset: 2mm, radius: 3pt,
+            image(meta.at("_cover_art"), width: 116mm, height: 42mm, fit: "cover")))
+      }
       place(bottom + left, dx: 14mm, dy: -17mm, {
         let im = meta.at("imprint", default: (:))
         block(width: 120mm, {
@@ -240,6 +248,13 @@
 
 // ---- LBiz supplied branded opener: chapter label + illustration + summary ---
 #let opener-image(n) = {
+  // 책 프로젝트가 장별 전용 도비라 이미지를 공급하면(assets/opener-NN.png →
+  // build.py가 meta._opener_images로 전달) 그 장의 그림을 쓴다. 공급이 없거나
+  // 장 수가 더 많으면 번들 7종 순환으로 떨어진다(기존 책 동작 보존).
+  let custom = meta.at("_opener_images", default: ())
+  if custom.len() > 0 and n >= 1 and n <= custom.len() and custom.at(n - 1) != none {
+    return custom.at(n - 1)
+  }
   let k = calc.rem(n - 1, 7) + 1
   if k == 1 { "../../assets/three-doors.png" }
   else if k == 2 { "../../assets/threshold-desk.png" }
@@ -448,7 +463,8 @@
     block(breakable: false, inset: (left: 6mm),
       stroke: (left: 3pt + navy-500), {
         set text(font: TT.quote-font, size: 13pt, fill: navy-900)
-        set par(leading: 0.62em, first-line-indent: 0em)
+        // 좁은 인용 상자에서 양끝맞춤을 켜 두면 어절 사이가 크게 벌어진다.
+        set par(leading: 0.62em, first-line-indent: 0em, justify: false)
         body
       })
   } else {
@@ -477,7 +493,7 @@
         let n = chapter-state.get().num
         let m = biz-fig.get().first() + 1
         text(font: TT.sans-font, size: 9pt, weight: "bold", fill: navy-700,
-          "[그림 " + str(n) + "-" + str(m) + "]")
+          "<그림 " + str(n) + "-" + str(m) + ">")
         h(0.5em)
         text(font: TT.sans-font, size: 11pt, weight: "semibold", fill: ink, caption)
       }
@@ -505,7 +521,12 @@
     }
     v(2mm)
   }
-  body
+  // 표 셀은 좁아서 본문의 양끝맞춤을 물려받으면 어절 사이에 흰 강이 생긴다.
+  // 표 안에서만 양끝맞춤을 끈다(본문 문단은 그대로 양끝맞춤).
+  [#{
+    set par(justify: false)
+    body
+  }]
   if source != none {
     v(2mm)
     text(font: TT.sans-font, size: 7.5pt, fill: ink-60, [자료: #source])
@@ -616,11 +637,21 @@
   let product-guide = meta.at("source_list_mode", default: "") == "product-guide"
   let investment-association = meta.at("source_list_mode", default: "") == "investment-association"
   let medical-mso = meta.at("source_list_mode", default: "") == "medical-mso"
+  let corporate-tax = meta.at("source_list_mode", default: "") == "corporate-tax"
+  // 책별 출처 목록은 메타데이터로 덮어쓸 수 있다. 테마의 기본 문구를 유지하되,
+  // 확인일·공식 창구가 중요한 실무서가 다른 판의 오래된 문구를 물려받지 않게 한다.
+  let source-intro = meta.at("source_list_intro", default: none)
+  let source-heading = meta.at("source_list_heading", default: "본문의 핵심 근거")
+  let source-items = meta.at("source_list_items", default: ())
+  let recheck-heading = meta.at("source_list_recheck_heading", default: none)
+  let recheck-items = meta.at("source_list_recheck_items", default: ())
   let notice = meta.at("disclaimer", default:
     if investment-association {
       "본 자료는 개인투자조합의 등록·운영·청산을 이해하기 위한 일반 안내입니다. 실제 접수·투자·분배·세무 신고 전에는 최신 공식 서식과 조합별 사실관계를 변호사·세무사·회계사 및 접수기관과 확인하십시오."
     } else if medical-mso {
       "본 자료는 의료기관 경영지원 구조를 이해하기 위한 교육·실무 보조 자료입니다. 실제 설립·계약·세무·노무·개인정보·의료광고 판단 전에는 최신 원문과 기관별 사실관계를 자격사와 확인하십시오."
+    } else if corporate-tax {
+      "본 자료는 법인 가지급금을 이해하고 정리 순서를 세우기 위한 교육·실무 보조 자료입니다. 세액과 처분은 회사의 사실관계·장부·계약·시기에 따라 달라지므로, 실제 실행 전에는 반드시 최신 법령 원문을 확인하고 세무사·회계사·변호사 등 자격사의 개별 검토를 받으십시오."
     } else {
       "본 자료는 일반 안내이며 개별 자문을 대신하지 않습니다. 실제 적용 전에는 최신 원문과 회사별 사실관계를 전문가와 확인하십시오."
     })
@@ -628,27 +659,36 @@
   page(header: none, footer: none, background: none, fill: ivory, {
     set text(font: t.body-font, size: 8.8pt, fill: ink, lang: "ko", region: "KR")
     set par(justify: false, first-line-indent: 0em, leading: 0.62em, spacing: 0.72em)
-    text(font: t.display-font, size: 18pt, weight: "bold", fill: navy-900,
+    text(font: t.display-font, size: 16pt, weight: "bold", fill: navy-900,
       "출처·확인 필요 목록 (독자용)")
-    v(2mm)
+    v(1.5mm)
     line(length: 42mm, stroke: 1pt + accent)
-    v(5mm)
+    v(3.5mm)
     text(font: t.sans-font, size: 8.7pt, fill: ink,
-      if product-guide {
+      if source-intro != none {
+        source-intro
+      } else if product-guide {
         "아래는 본문에서 참조한 Claude 공식 문서와 실제 앱 화면, 그리고 독자가 마지막으로 확인할 항목입니다. 제품명·요금·기능·화면은 계정·운영체제·출시 시점에 따라 달라질 수 있습니다."
       } else if investment-association {
         "아래는 본문에서 참조한 개인투자조합 법·시행령·시행규칙·고시·행정 안내와 독자가 조합별로 마지막에 확인할 항목입니다. 법령·서식·접수창구는 신청일에 국가법령정보센터와 담당기관에서 다시 확인하십시오."
       } else if medical-mso {
-        "아래는 본문에서 참조한 의료·세무·노무·개인정보·의료광고 관련 법령과 정부 안내, 그리고 MSO 운영자가 마지막에 확인할 항목입니다. 실제 적용 전에는 국가법령정보센터와 관계기관의 최신 원문을 다시 확인하십시오."
+        "아래는 본문에서 참조한 의료·세무·노무·개인정보·의료광고 관련 법령과 정부 안내, 그리고 MSO 운영자가 마지막에 확인할 항목입니다. " + meta.at("law_asof_note", default: "") + "실제 적용 전에는 국가법령정보센터와 관계기관의 최신 원문을 다시 확인하십시오."
+      } else if corporate-tax {
+        "아래는 본문에서 참조한 법령과 정부 안내, 그리고 대표님이 회사의 장부를 놓고 마지막으로 확인할 항목입니다. 법령 원문은 국가법령정보센터(law.go.kr), 예규·판례는 국세법령정보시스템(taxlaw.nts.go.kr)에서 법령명과 조문으로 다시 확인할 수 있습니다."
       } else {
         "아래는 본문에서 참조한 법·제도와 대표님이 마지막으로 확인할 항목입니다. 법령 원문은 국가법령정보센터(law.go.kr)에서 법령명과 조문으로 다시 확인할 수 있습니다."
       })
-    v(3mm)
+    v(2mm)
     block(width: 100%, fill: white, stroke: 0.5pt + rule-c, inset: (x: 5mm, y: 4mm), {
       text(font: t.sans-font, size: 8pt, weight: "bold", fill: navy-700,
-        if product-guide { "본문의 핵심 근거" } else { "본문의 핵심 근거" })
+        source-heading)
       v(2mm)
-      if product-guide {
+      if source-items.len() > 0 {
+        for item in source-items {
+          text(size: 8.2pt, fill: ink, "· " + item)
+          linebreak()
+        }
+      } else if product-guide {
         text(size: 8.2pt, fill: ink,
           "· Claude Code 데스크톱 시작·참조 문서(code.claude.com)")
         linebreak()
@@ -662,19 +702,34 @@
           "· 실제 Claude 데스크톱 설정 화면 관찰·주석 캡처(2026-09-12)")
       } else if investment-association {
         text(size: 8.2pt, fill: ink,
-          "· 벤처투자 촉진에 관한 법률 제12조·제13조·제18조·제19조·제22조 현행 원문")
+          "· 벤처투자 촉진에 관한 법률 제12조·제13조·제14조·제15조·제16조·제18조·제19조·제22조 현행 원문")
         linebreak()
         text(size: 8.2pt, fill: ink,
-          "· 같은 법 시행령 제6조·제7조·제8조·제10조 및 시행규칙 제5조·제9조·별지 서식")
+          "· 같은 법 시행령 제6조~제12조 및 시행규칙 제5조·제7조·제9조·제10조와 별지 서식")
         linebreak()
         text(size: 8.2pt, fill: ink,
-          "· 개인투자조합 등록 및 투자확인서 발급규정과 정부24 민원 안내")
+          "· 개인투자조합 등록 및 투자확인서 발급규정(중소벤처기업부 고시)의 별지 서식과 처리 절차")
         linebreak()
         text(size: 8.2pt, fill: ink,
-          "· 조세특례제한법 제16조와 국세법령정보시스템의 사실관계별 세무 검토 창구")
+          "· 조세특례제한법 제14조·제16조와 같은 법 시행령 제13조·제14조")
         linebreak()
         text(size: 8.2pt, fill: ink,
-          "· 2026-09-15 집필팀이 확인한 공식 출처 목록과 법령 재확인 기록")
+          "· 상속세 및 증여세법 제78조·제82조, 같은 법 시행령 제84조, 시행규칙 별지 제21호의2·제21호의4서식")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 상법의 전환사채 발행·등기 규정, 소득세법의 원천징수·지급명세서 규정")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 벤처기업육성에 관한 특별법·시행령의 벤처기업 확인 요건")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 전자문서 및 전자거래 기본법·전자서명법·개인정보 보호법")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 중소벤처기업부·지방중소벤처기업청·엔젤투자지원센터·한국벤처캐피탈협회 안내")
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 2026-09-18 국가법령정보센터 원문 조회 기록")
       } else if medical-mso {
         text(size: 8.2pt, fill: ink,
           [· 의료법 제33·56·57조: #link("https://law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1032064215")[국가법령정보센터 제57조 원문]에서 광고 기준 확인])
@@ -689,7 +744,31 @@
           [· 근로기준법 제17조·파견근로자 보호 관련 법령: #link("https://www.law.go.kr/법령/근로기준법/제17조")[근로기준법 제17조]와 고용노동부 안내 대조])
         linebreak()
         text(size: 8.2pt, fill: ink,
-          [· 집필 확인일 2026-09-15: 의료법·개인정보 보호법 2026-09-11 시행본과 #link("https://pipc.go.kr/np/cop/bbs/selectBoardArticle.do?bbsId=BS074&mCode=C020010000&nttId=12459")[개인정보보호위원회 개정 안내]를 대조; 실제 적용일 다시 확인])
+          [· 특수관계 임대차·법인세율·업무무관자산: 법인세법 제27조·제28조·제52조·제55조·제60조의2와 같은 법 시행령·시행규칙])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 법인의 부동산 취득·보유: 지방세법 제11조·제13조·제16조·제103조의20, 수도권정비계획법 시행령 별표 1])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 자금출처·증여·승계: 상속세 및 증여세법 제45조·제45조의5·제53조·제63조 / 건축과 등기: 건축법·부동산등기법·부가가치세법])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 집필 확인일 2026-09-15, 보완판 확인일 2026-09-18: 의료법·개인정보 보호법 2026-09-11 시행본과 #link("https://pipc.go.kr/np/cop/bbs/selectBoardArticle.do?bbsId=BS074&mCode=C020010000&nttId=12459")[개인정보보호위원회 개정 안내]를 대조; 세법은 2026-01-01 이후 개시 사업연도 기준. 실제 적용일 다시 확인])
+      } else if corporate-tax {
+        text(size: 8.2pt, fill: ink,
+          [· 법인세법 제28조·제52조·제67조와 같은 법 시행령 제53조·제88조·제89조·제106조 현행 원문: #link("https://www.law.go.kr/법령/법인세법/제52조")[법인세법 제52조]])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 법인세법 시행규칙 제43조(당좌대출이자율)·제44조(업무무관 가지급금 제외 대상) 원문: #link("https://www.law.go.kr/법령/법인세법시행규칙")[법인세법 시행규칙]])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 소득세법·상속세 및 증여세법·상법의 배당·퇴직소득·증여의제·자기주식 관련 조문: #link("https://www.law.go.kr")[국가법령정보센터]])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          [· 국세청·홈택스 신고 안내와 국세법령정보시스템의 예규·심사·심판례: #link("https://taxlaw.nts.go.kr")[국세법령정보시스템]])
+        linebreak()
+        text(size: 8.2pt, fill: ink,
+          "· 기획재정부 세법개정안 보도자료 및 중소벤처기업부·정책금융기관의 공개 심사 안내")
       } else {
         text(size: 8.2pt, fill: ink,
           "· 상법·법인세법·소득세법·상속세 및 증여세법의 현행 원문과 시행령·시행규칙")
@@ -704,11 +783,16 @@
           "· 2026-09-10 korean-law 원문 조회 및 법령 사실 대장(research/fact-ledger.md)")
       }
     })
-    v(4mm)
+    v(3mm)
     text(font: t.sans-font, size: 8pt, weight: "bold", fill: navy-700,
-      if product-guide { "독자가 작업별로 다시 확인할 항목" } else if investment-association { "조합별로 다시 확인할 항목" } else if medical-mso { "MSO 운영자가 다시 확인할 항목" } else { "대표님이 회사별로 다시 확인할 항목" })
+      if recheck-heading != none { recheck-heading } else if product-guide { "독자가 작업별로 다시 확인할 항목" } else if investment-association { "조합별로 다시 확인할 항목" } else if medical-mso { "MSO 운영자가 다시 확인할 항목" } else if corporate-tax { "대표님이 회사 장부로 다시 확인할 항목" } else { "대표님이 회사별로 다시 확인할 항목" })
     v(2mm)
-    if product-guide {
+    if recheck-items.len() > 0 {
+      for item in recheck-items {
+        text(size: 8.2pt, fill: ink, "· " + item)
+        linebreak()
+      }
+    } else if product-guide {
       text(size: 8.2pt, fill: ink,
         "· 현재 계정·플랜·운영체제에서 같은 메뉴와 권한이 보이는가")
       linebreak()
@@ -731,7 +815,16 @@
         "· 등록 후 투자의무·관계인 거래·보고·변경등록·청산 일정과 증거 보관 위치를 정했는가")
       linebreak()
       text(size: 8.2pt, fill: ink,
-        "· 투자확인서·소득공제·분배·보수·원천징수의 조합별 세무 쟁점을 전문가에게 전달했는가")
+        "· 우리 조합이 투자대상 기업과 특수관계인지, 그러면 어느 제한 조항을 볼지 정리했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 반기·결산보고와 세무서 제출 명세서를 각각 다른 창구에 기한 안에 냈는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 투자확인서·소득공제·분배·보수·원천징수 쟁점을 전문가에게 전달했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 해산·청산·등록말소·고유번호증 말소까지 일정에 넣었는가")
     } else if medical-mso {
       text(size: 8.2pt, fill: ink,
         "· 의료기관과 MSO의 소유·자금·진료·인사·광고 책임이 실제 행동에서도 분리되는가")
@@ -744,6 +837,27 @@
       linebreak()
       text(size: 8.2pt, fill: ink,
         "· 의료광고·환자 유입·사고 대응에 필요한 최신 기준과 자격사 검토를 확인했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 건물을 별도 법인이 소유한다면 임대료 산정 근거를 계약 전에 남겼고, 어느 법인세율표에 해당하는지 확인했는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 자녀의 소득·증여가 해마다 신고되고 그 기록이 한곳에 모여 있는가")
+    } else if corporate-tax {
+      text(size: 8.2pt, fill: ink,
+        "· 잔액과 발생 시점: 계정별원장에서 언제·얼마가·어떤 이유로 늘었는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 업무 관련성 증빙: 지출 목적·상대방·계약·이사회 승인 기록이 남아 있는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 이자율 선택: 가중평균차입이자율과 당좌대출이자율 중 무엇을 썼고 신고서에 적었는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 정관·임원 보수 및 퇴직금 지급규정이 실제 지급액과 시점을 뒷받침하는가")
+      linebreak()
+      text(size: 8.2pt, fill: ink,
+        "· 상환 계획의 자금 출처와 순서, 그리고 그 실행이 남길 소득세·증여세·4대보험 부담")
     } else {
       text(size: 8.2pt, fill: ink,
         "· 법인 형태·결산월·주주명부·임원등기와 실제 의사결정 권한")
@@ -757,7 +871,7 @@
       text(size: 8.2pt, fill: ink,
         "· 승계·증여·상속의 적용일, 신고·납부일, 경영·고용·자산 사후관리 조건")
     }
-    v(4mm)
+    v(3mm)
     block(width: 100%, fill: paper-alt, inset: (x: 5mm, y: 4mm), {
       text(font: t.sans-font, size: 8pt, weight: "bold", fill: alert-c, "주의")
       v(2mm)
@@ -765,7 +879,8 @@
         notice)
     })
     v(1fr)
-    block(width: 100%, {
+    // 이 블록이 쪼개지면 판권 줄만 다음 면으로 넘어가 빈 면이 하나 더 생긴다.
+    block(breakable: false, width: 100%, {
       line(length: 100%, stroke: 0.4pt + rule-c)
       v(2mm)
       text(font: t.sans-font, size: 6.2pt, fill: navy-700,
@@ -774,7 +889,7 @@
         "의 사전 서면 동의 없이 무단 복제·배포·전송·게시·공유하는 행위를 금합니다.")
       v(1mm)
       text(font: t.sans-font, size: 7pt, fill: ink-60,
-        "상담·강의 보조")
+        meta.at("source_list_footer", default: "상담·강의 보조"))
       h(1fr)
       text(font: t.sans-font, size: 7pt, fill: ink-60,
         meta.at("title", default: "가족법인 실무백서") + " · 출처·확인 필요 목록")
@@ -879,10 +994,24 @@
     width: 100%, fill: paper-alt, inset: 5mm, stroke: 0.5pt + navy-100,
     text(font: code-font, size: 8.5pt, it))
 
+  // 인라인 코드: 고정폭 글꼴은 한글 글리프가 없어 대체 글꼴로 떨어지고,
+  // 그 결과 본문 가운데에서 글자가 작아지고 낱말 사이가 벌어져 보인다.
+  // 본문 글꼴을 그대로 쓰고 옅은 바탕으로만 구분한다.
+  // box 로 감싸면 줄을 넘지 못해 긴 구절이 앞 줄을 벌려 놓는다.
+  // highlight 는 줄바꿈을 허용하므로 바탕 강조를 유지하면서도 문장이 자연스럽게 흐른다.
+  show raw.where(block: false): it => highlight(
+    fill: paper-alt, extent: 1pt, radius: 1.5pt,
+    text(font: t.body-font, size: t.body-size, fill: navy-700, it))
+
   // 표: 세로 괘선·얼룩말 금지, navy 상하 굵은 룰
-  set table(stroke: none, inset: (x: 3mm, y: 2.6mm), fill: none)
+  // 좌우 여백 1mm를 줄이면 열마다 2mm씩 글자 폭이 늘어난다(5열이면 10mm).
+  // A5 판면에서 좁은 열의 낱말이 중간에서 끊기는 것을 줄이는 데 가장 효과가 크다.
+  set table(stroke: none, inset: (x: 1.4mm, y: 2.6mm), fill: none)
   show table: it => {
     set text(size: if brand-editorial { 8.5pt } else { 9pt }, font: t.sans-font)
+    // 좁은 칸에서 낱말이 중간에서 끊기거나 어절이 벌어지지 않도록 표 안에서는
+    // 양끝맞춤을 끄고 줄 나눔을 낱말 단위로 둔다.
+    set par(justify: false, linebreaks: "optimized")
     block(breakable: false, {
       it
     })

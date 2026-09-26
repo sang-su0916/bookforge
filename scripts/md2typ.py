@@ -219,10 +219,32 @@ def render_tokens(tokens, ctx) -> str:
         i += 1
     return "\n".join(out)
 
+# GFM 작업목록(`- [ ] 항목`)은 markdown-it 기본 설정에서 일반 리스트로 들어오고
+# 대괄호가 본문에 그대로 인쇄된다. 인쇄물의 체크리스트는 네모 칸이어야 하므로
+# 항목 머리의 대괄호 표기를 걷어내고 그 목록만 마커를 네모로 바꾼다.
+# 네모는 글꼴 글리프가 아니라 조판으로 그려 글꼴 지원 여부와 무관하게 나온다.
+CHECKBOX_MARKER = (
+    "box(width: 3.1pt, height: 3.1pt, stroke: 0.55pt + luma(90), baseline: -0.2pt)"
+)
+CHECKBOX_DONE_MARKER = (
+    "box(width: 3.1pt, height: 3.1pt, stroke: 0.55pt + luma(90), baseline: -0.2pt, "
+    "align(center + horizon, text(size: 2.6pt, [X])))"
+)
+_CB_RE = re.compile(r"^\\\[([ xX])\\\][ \t]+")
+
+
+def _strip_checkbox(inner):
+    """항목 머리의 작업목록 표기를 떼고 (본문, 체크여부)를 돌려준다."""
+    m = _CB_RE.match(inner)
+    if not m:
+        return inner, None
+    return inner[m.end():], m.group(1) in ("x", "X")
+
+
 def render_list(tokens, ctx) -> str:
     ordered = tokens[0].type == "ordered_list_open"
     marker = "+" if ordered else "-"
-    items, i = [], 1
+    items, checks, i = [], [], 1
     while i < len(tokens) - 1:
         if tokens[i].type == "list_item_open":
             j, depth = i + 1, 1
@@ -233,12 +255,58 @@ def render_list(tokens, ctx) -> str:
                     depth -= 1
                 j += 1
             inner = render_tokens(tokens[i + 1:j - 1], ctx).strip()
-            inner = inner.replace("\n", "\n  ")
-            items.append(f"{marker} {inner}")
+            body, checked = _strip_checkbox(inner)
+            body = body.replace("\n", "\n  ")
+            items.append(f"{marker} {body}")
+            checks.append(checked)
             i = j
         else:
             i += 1
-    return "\n".join(items) + "\n"
+
+    out = "\n".join(items) + "\n"
+    if not ordered and items and all(c is not None for c in checks):
+        mk = CHECKBOX_DONE_MARKER if all(checks) else CHECKBOX_MARKER
+        return "#[\n#set list(marker: " + mk + ")\n" + out + "]\n"
+    return out
+
+# 표 열 폭: 균등 분할(1fr)은 좁은 열에서 낱말을 중간에서 끊고 넓은 열은 자리를 남긴다.
+# 각 열의 가장 긴 셀을 글자 폭으로 재서 그 비율대로 fr 을 배분한다.
+# 표 전체 폭은 그대로 판면 100%를 채운다(auto 를 쓰면 우측이 빈다).
+_TYP_MARKUP = re.compile(r"\\(.)|#\w+\([^)]*\)|[*_`\[\]#]")
+
+
+def _disp_width(text: str) -> int:
+    """조판에 실리는 글자 폭의 근사값. 한글·한자·전각은 두 칸으로 센다."""
+    plain = _TYP_MARKUP.sub(lambda m: m.group(1) or "", text)
+    w = 0
+    for ch in plain:
+        o = ord(ch)
+        w += 2 if (0x1100 <= o <= 0x115F or 0x2E80 <= o <= 0xA4CF
+                   or 0xAC00 <= o <= 0xD7A3 or 0xF900 <= o <= 0xFAFF
+                   or 0xFE30 <= o <= 0xFE6F or 0xFF00 <= o <= 0xFF60
+                   or 0xFFE0 <= o <= 0xFFE6) else 1
+    return w
+
+
+def column_weights(rows, ncol: int) -> str:
+    """열별 최장 셀 폭에 비례한 fr 목록을 돌려준다."""
+    # 한 열이 표를 독식하지 않도록 상·하한을 둔다. 하한은 머리글 두 글자가
+    # 한 줄에 들어갈 최소치, 상한은 한 열이 절반을 넘지 않게 하는 값이다.
+    LO, HI = 6, 34
+    widths = []
+    for c in range(ncol):
+        longest = 0
+        for r in rows:
+            if c < len(r):
+                longest = max(longest, _disp_width(r[c]))
+        widths.append(min(HI, max(LO, longest)))
+    # 차이를 그대로 쓰면 긴 열이 과하게 커진다. 제곱근으로 눌러 균형을 맞춘다.
+    damped = [w ** 0.5 for w in widths]
+    # 그래도 짧은 열은 균등 몫보다 좁아져 낱말이 중간에서 끊긴다.
+    # 어떤 열도 균등 몫의 85% 아래로 내려가지 않게 바닥을 둔다.
+    floor = (sum(damped) / len(damped)) * 0.85
+    damped = [round(max(w, floor) * 10) / 10 for w in damped]
+    return "(" + ", ".join(f"{w}fr" for w in damped) + ")"
 
 def render_table(tokens, ctx, cap=None) -> str:
     rows, cur = [], None
@@ -256,8 +324,7 @@ def render_table(tokens, ctx, cap=None) -> str:
     for r in rows:
         r = r + [""] * (ncol - len(r))
         cells.extend(f"[{c}]" for c in r)
-    # (1fr,)*n — 표 폭 = 판면 폭 100% 강제 (auto 컬럼은 내용 폭만큼만 차지해 우측이 빈다)
-    tbl = f"table(columns: (1fr,) * {ncol}, " + ", ".join(cells) + ")"
+    tbl = f"table(columns: {column_weights(rows, ncol)}, " + ", ".join(cells) + ")"
     if cap:
         title, source = cap
         args = [f"caption: [{esc(title)}]"]
