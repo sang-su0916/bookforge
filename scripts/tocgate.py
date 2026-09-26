@@ -8,8 +8,10 @@
 
   G14-A 인쇄 목차 쪽번호 ↔ 실제 폴리오 자기일관성.
         폴리오 관습(book-anatomy C9): 본문 1쪽부터 — 기대값 = 장 시작 절대페이지 − 오프셋
-        (오프셋 = 첫 장 시작 − 1). 목차 면에서 장제목 행과 y-겹침으로 페어링한
-        최우측 숫자를 인쇄값으로 읽어 대조한다. 외부 진리 불필요한 내부 일관성 검사.
+        (오프셋 = 첫 장 시작 − 1). 목차 면에서 장제목 행(접힌 연속행 포함, 전체 제목
+        일치 우선)과 y-겹침으로 페어링한 숫자를 인쇄값으로 읽어 대조한다. 쪽번호가
+        제목 마지막 줄에서 떨어져 아랫줄에 홀로 서면 고아 쪽번호로 FAIL. 외부 진리
+        불필요한 내부 일관성 검사.
   G14-B 목차 유채색 ↔ 도비라(장 오프너) 유채색의 색상(hue) 정합 — 목차가 본문과
         다른 색 계열을 쓰는 "다른 책 같은 목차"를 차단. 명도/채도 셰이드 변주는 허용.
   G14-C 유채색 텍스트의 배경 대비 WCAG 하한 — 전 면 스캔. 렌더 픽스맵에서 스팬
@@ -116,8 +118,14 @@ def find_toc_pages(doc, titles, search_upto=7, first_ch=None):
         # 찾지 못함"으로 오탐 FAIL하며 G14-B는 색 정합 축이 통째로 침묵했다(적대검토 D4:
         # 10장×10절·12장×8절·14장×6절·20장×4절이 모두 실패 영역).
         # 도비라가 범위 밖이므로 "장제목 1개 이상 또는 쪽번호 칼럼"으로 시작 면을 잡는다.
+        # 제목 히트 면도 **쪽번호 칼럼(순수 숫자 스팬 ≥1)**이 있어야 시작 면이다 — 목차
+        # 면은 원리적으로 숫자를 싣는다. 제목 키(정규화 앞 10자)는 책 제목과 겹칠 수 있어
+        # (CC101: 'Claude Code란?' 키 'claudecode' ⊂ 속표지 'Claude Code로 AI 시작하기')
+        # 숫자 없는 속표지가 목차 첫 면으로 잡히고, G14-A가 그 면의 책 제목 스팬을 장
+        # 행으로 읽어 "행에 쪽번호 없음" 오탐 FAIL을 냈다.
         for pno in sorted(hits_by_page):
-            if hits_by_page[pno] >= 1 or _digit_spans(doc[pno]) >= 3:
+            digits = _digit_spans(doc[pno])
+            if (hits_by_page[pno] >= 1 and digits >= 1) or digits >= 3:
                 start = pno
                 break
     else:
@@ -192,6 +200,87 @@ def _caption_zone(s, zones, pad_x=2, pad_top=2, pad_bot=20):
     return None
 
 
+def _title_row_lines(spans, t_span, key, full):
+    """목차 제목 행의 **줄 bbox 목록**과 일치 품질을 돌려준다 → (lines, q).
+
+    t_span(키를 품은 스팬)에서 시작해, 전체 제목의 접두를 계속 만족하는 스팬을 이어
+    붙인다 — 같은 줄의 바로 오른쪽 스팬(서식이 갈린 제목) 또는 바로 아랫줄의 제목
+    들여쓰기 자리 스팬(접힌 연속행). 연속행 x 허용폭(-3~+8pt)은 행잉 인덴트가 첫 줄
+    보다 약간 깊은 절 행(practical 절 +2mm)까지 흡수한다.
+    q: 2 = 이어 붙인 텍스트가 전체 제목과 일치, 1 = 제목의 접두(축약·미완), 0 = 불일치
+    (책 제목처럼 키만 겹치는 스팬)."""
+    t = _norm(t_span["text"])
+    acc = t[t.find(key):] if key in t else t
+    lines = [list(t_span["bbox"])]
+    if not full.startswith(acc):
+        return lines, 0
+    x0 = t_span["bbox"][0]
+    used = {id(t_span)}
+    while acc != full:
+        last = lines[-1]
+        h = max(last[3] - last[1], 1.0)
+        nxt = None
+        for c in spans:
+            if id(c) in used:
+                continue
+            cb = c["bbox"]
+            ct = _norm(c["text"])
+            if not ct or not full.startswith(acc + ct):
+                continue
+            cy = (cb[1] + cb[3]) / 2
+            same_line = (last[1] - 1 <= cy <= last[3] + 1
+                         and last[2] - 1 <= cb[0] <= last[2] + 6)
+            next_line = (last[3] - 0.5 * h <= cb[1] <= last[3] + 0.9 * h
+                         and x0 - 3 <= cb[0] <= x0 + 8)
+            if same_line or next_line:
+                nxt = (c, same_line)
+                break
+        if nxt is None:
+            break
+        c, same_line = nxt
+        used.add(id(c))
+        acc += _norm(c["text"])
+        if same_line:
+            last[2] = max(last[2], c["bbox"][2])
+            last[1] = min(last[1], c["bbox"][1])
+            last[3] = max(last[3], c["bbox"][3])
+        else:
+            lines.append(list(c["bbox"]))
+    return lines, (2 if acc == full else 1)
+
+
+def _orphan_number(spans, t_lines):
+    """제목 마지막 줄 바로 아랫줄, 제목 들여쓰기 자리에 홀로 선 순수 숫자 스팬(또는 None)."""
+    last = t_lines[-1]
+    h = max(last[3] - last[1], 1.0)
+    x0 = t_lines[0][0]
+    for s in spans:
+        b = s["bbox"]
+        if (s["text"].strip().isdigit() and not _is_ordinal_decoration(s["text"])
+                and last[3] - 0.5 * h <= b[1] <= last[3] + 0.9 * h
+                and x0 - 3 <= b[0] <= x0 + 8):
+            return s
+    return None
+
+
+def _on_own_line(spans, t_lines, n):
+    """숫자 스팬 n이 제목 행의 어느 줄 위에 **자기 칼럼 쪽번호로** 앉아 있는가 —
+    수직 중심이 그 줄 안이고, 줄 끝과 n 사이에 다른 텍스트 스팬이 없다."""
+    nb = n["bbox"]
+    cy = (nb[1] + nb[3]) / 2
+    for ln in t_lines:
+        if not (ln[1] <= cy <= ln[3]) or nb[0] < ln[2] - 1:
+            continue
+        blocked = any(
+            t is not n and not t["text"].strip().isdigit()
+            and t["bbox"][0] >= ln[2] - 1 and t["bbox"][2] <= nb[0] + 1
+            and not (t["bbox"][3] < ln[1] or t["bbox"][1] > ln[3])
+            for t in spans)
+        if not blocked:
+            return True
+    return False
+
+
 def g14a_toc_numbers(doc, titles, ch_starts, toc_pages=None):
     problems, pairs = [], []
     if not ch_starts:
@@ -208,12 +297,24 @@ def g14a_toc_numbers(doc, titles, ch_starts, toc_pages=None):
             break
         expected = ch_starts[i] - offset
         key = _norm(title)[:10]
-        t_span, t_page = None, None
+        full = _norm(title)
+        # 제목 스팬 선택 — 키(앞 10자)를 품은 스팬 중 **접힌 연속행까지 이어 붙여 전체
+        # 제목과 일치하는 행**을 우선한다. 키만 보면 앞 10자가 같은 두 장('Claude Code란?'
+        # / 'Claude Code로 할 수 있는 것들')이 같은 스팬을 집어 한쪽이 남의 쪽번호와
+        # 페어링된다. 일치 행이 없으면(목차가 제목을 축약 등) 구 규칙(첫 히트)으로 폴백.
+        best = None
         for p in toc_pages:
-            hit = [s for s in spans_by_page[p] if key and key in _norm(s["text"])]
-            if hit:
-                t_span, t_page = hit[0], p
+            for s in spans_by_page[p]:
+                if not key or key not in _norm(s["text"]):
+                    continue
+                lines, q = _title_row_lines(spans_by_page[p], s, key, full)
+                if best is None or q > best[0]:
+                    best = (q, p, s, lines)
+            if best is not None and best[0] == 2:
                 break
+        t_span = t_page = None
+        if best is not None:
+            _, t_page, t_span, t_lines = best
         if t_span is None:
             all_joined = _norm("".join(s["text"] for p in toc_pages for s in spans_by_page[p]))
             if key not in all_joined:
@@ -227,7 +328,6 @@ def g14a_toc_numbers(doc, titles, ch_starts, toc_pages=None):
                 if str(expected) not in nums:
                     problems.append(f"목차 p{toc_pages[0] + 1}~: '{title[:16]}' 기대 쪽번호 {expected} 부재")
             continue
-        y0, y1 = t_span["bbox"][1], t_span["bbox"][3]
 
         def in_image_col(s):
             # 이미지맵(썸네일 칼럼) 소속 캡션 숫자는 페어링 후보가 아니다. 단, 제목
@@ -237,13 +337,21 @@ def g14a_toc_numbers(doc, titles, ch_starts, toc_pages=None):
             z = _caption_zone(s, zones_by_page[t_page])
             return (z is not None
                     and not (t_span["bbox"][2] > z[0] - 2 and t_span["bbox"][0] < z[2] + 2))
+
+        def overlaps_row(s):
+            # 접힌 제목이면 행 = 제목의 **모든 줄**. 쪽번호가 어느 줄에 앉는지는 레이아웃
+            # 관습이다 — 리더 레이아웃(practical·academic·essay)은 마지막 줄, 리더 없는
+            # 그리드(business display-numeral)는 첫 줄. 첫 줄만 보던 구 구현은 마지막 줄
+            # 쪽번호를 놓치고 옆 칼럼 숫자·장 칩과 오페어링했다(CC101 CH19 '인쇄 19').
+            return any(not (s["bbox"][3] < ln[1] - 4 or s["bbox"][1] > ln[3] + 4)
+                       for ln in t_lines)
         # 같은 행(y 겹침)의 순수 숫자 스팬 — 좌우 무관, 서수 장식(leading zero) 제외,
         # 이미지맵 캡션 제외, 제목과 수평으로 가장 가까운 것이 쪽번호
         # (다단 목차의 이웃 칼럼 오탐 방지)
         cands = [s for s in spans_by_page[t_page]
                  if s["text"].strip().isdigit()
                  and not _is_ordinal_decoration(s["text"])
-                 and not (s["bbox"][3] < y0 - 4 or s["bbox"][1] > y1 + 4)
+                 and overlaps_row(s)
                  and not in_image_col(s)]
         # 폴리오 위치 관습은 스타일에 따라 갈린다 — 제목 뒤(우측: practical 2단·
         # display-numeral 등) 또는 제목 앞(좌측: magazine 스프레드 17pt 폴리오).
@@ -254,25 +362,45 @@ def g14a_toc_numbers(doc, titles, ch_starts, toc_pages=None):
         # 오탐 6건이 실재했다(w7-b5·cover-apply 실측). 우측 후보가 전무할 때만
         # 좌측을 쪽번호로 읽는다 — magazine 스프레드가 정확히 이 경로다.
         rights = [s for s in cands if s["bbox"][2] > t_span["bbox"][0]]
+        # 고아 쪽번호 판정은 페어링보다 먼저 한다 — 행의 **자기 칼럼** 줄 위에 숫자가 없고
+        # (중심이 제목 줄 안 ∧ 제목 끝과 숫자 사이에 다른 텍스트 없음 — 2단 목차의 옆 칼럼
+        # 쪽번호·±4pt로 걸리는 윗행 쪽번호 배제) 제목 아랫줄에 숫자가 홀로 서 있으면
+        # 조판 결함이다. 페어링으로 보내면 옆 칼럼·윗행 숫자와 짝지어져 원인과 무관한
+        # '인쇄 X ≠ 폴리오' 메시지가 된다.
+        own = [s for s in rights if _on_own_line(spans_by_page[t_page], t_lines, s)]
+        if not own:
+            orphan = _orphan_number(spans_by_page[t_page], t_lines)
+            if orphan is not None:
+                # 제목 마지막 줄 바로 아래, 제목 들여쓰기 자리에 숫자만 홀로 선 줄 —
+                # 리더·쪽번호가 제목과 떨어져 개행된 조판 결함(CC101 CH20 '181').
+                # 좌측 폴백으로 보내면 이웃 칼럼 숫자와 페어링해 원인과 무관한
+                # '인쇄 X ≠ 폴리오' 메시지가 되므로 원인을 직접 보고한다.
+                problems.append(
+                    f"목차 p{t_page + 1}: '{title[:16]}' 쪽번호({orphan['text'].strip()})가 "
+                    "제목과 다른 줄에 홀로 떨어짐(고아 쪽번호 — 쪽번호는 제목 줄 오른끝에 "
+                    "붙어야 함, 리더 레이아웃은 마지막 줄)")
+                continue
         if rights:
             cands = rights
         if not cands:
             problems.append(f"목차 p{t_page + 1}: '{title[:16]}' 행에 쪽번호 없음")
             continue
 
-        t_cy = (y0 + y1) / 2
-
         def pair_score(s):
             # 수평 거리 + 수직 중심 이탈 페널티 — 인접 행(절 목록)의 숫자가
-            # 미세한 x-지터로 이기는 것을 막는다
-            if s["bbox"][2] <= t_span["bbox"][0]:
-                hd = t_span["bbox"][0] - s["bbox"][2]
-            elif s["bbox"][0] >= t_span["bbox"][2]:
-                hd = s["bbox"][0] - t_span["bbox"][2]
-            else:
-                hd = 0.0
+            # 미세한 x-지터로 이기는 것을 막는다. 접힌 제목은 줄마다 재서 최소값.
             cy = (s["bbox"][1] + s["bbox"][3]) / 2
-            return hd + 40 * abs(cy - t_cy)
+            best_sc = None
+            for ln in t_lines:
+                if s["bbox"][2] <= ln[0]:
+                    hd = ln[0] - s["bbox"][2]
+                elif s["bbox"][0] >= ln[2]:
+                    hd = s["bbox"][0] - ln[2]
+                else:
+                    hd = 0.0
+                sc = hd + 40 * abs(cy - (ln[1] + ln[3]) / 2)
+                best_sc = sc if best_sc is None else min(best_sc, sc)
+            return best_sc
         printed = int(min(cands, key=pair_score)["text"].strip())
         pairs.append({"title": title, "printed": printed, "expected": expected})
         if printed != expected:

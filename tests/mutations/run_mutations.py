@@ -5,6 +5,13 @@ PASS 상태의 책 PDF에 고의 결함을 주입한 사본을 만들고, tocgat
 실제로 검출하는지 어서션한다. 전부 검출되어야 exit 0.
 
   M1  목차 쪽번호 변조  — 첫 장의 인쇄 쪽번호를 +7 틀리게 재스탬핑 → G14-A FAIL
+  M1w 접힌 행 쪽번호 변조 — 제목이 2줄 이상으로 접힌 첫 장 행의 쪽번호(마지막 줄 또는
+                         첫 줄에 앉은 진짜 쪽번호)를 +7 재스탬핑 → G14-A FAIL. 접힌 행
+                         페어링(연속행 추적)이 틀린 인쇄값을 놓치지 않는지 고정한다
+                         (CC101 사고: 첫 줄만 보던 구 페어링은 접힌 행 쪽번호를 못 봤다)
+  M1o 고아 쪽번호       — 같은 행의 쪽번호를 지우고 제목 마지막 줄 **아랫줄 들여쓰기
+                         자리**에 홀로 재스탬핑 → G14-A FAIL(값이 맞아도 결함 — CC101 CH20
+                         '181' 단독 행의 지면 등가물). 접힌 행이 없는 책이면 둘 다 건너뛴다
   M18 이미지맵 캡션     — 목차 행과 y-겹침인 썸네일 이미지+캡션 숫자(기대값 +7)를 주입
                          → G14-A는 캡션을 무시하고 진짜 쪽번호와 페어링해 **문제 0건**
                          이어야 한다(w7-b3 실측 사고의 역방향 고정: 수리 전 pair_score는
@@ -170,7 +177,7 @@ except ImportError:
 
 from tocgate import (find_toc_pages, g14a_toc_numbers, g14b_key_color, g14c_contrast,
                      g14d_section_numbers, g14e_list_numbers, _printed_toc_rows,
-                     _LIST_ROW_RE, _norm as _toc_norm)
+                     _LIST_ROW_RE, _norm as _toc_norm, _title_row_lines)
 from qc_gate import (g1_scale_check, line_records, g3_collide_page, _column_bands,
                      front_frame_for, collide_exempt_pages, LINT_HARD_CODES,
                      COLLIDE_OX_PT, OVERLAP_APPROVE_MAX_OX_PT, MM2PT, TOL)
@@ -897,6 +904,52 @@ def mutate_toc_number(doc, titles, ch_starts):
     return False
 
 
+def _wrapped_toc_row(doc, titles, ch_starts):
+    """제목이 2줄 이상으로 접힌 첫 장 행 → (page, title, expected, lines, num_span) 또는 None.
+    num_span은 그 행의 줄 중 하나와 y-겹침이고 제목 시작보다 오른쪽인 기대값 스팬."""
+    toc_pages = find_toc_pages(doc, titles, first_ch=ch_starts[0])
+    offset = ch_starts[0] - 1
+    for i, title in enumerate(titles):
+        if i >= len(ch_starts):
+            break
+        expected = ch_starts[i] - offset
+        full = _toc_norm(title)
+        key = full[:10]
+        for p in toc_pages:
+            spans = [s for b in doc[p].get_text("dict")["blocks"]
+                     for l in b.get("lines", []) for s in l["spans"] if s["text"].strip()]
+            for s in spans:
+                if not key or key not in _toc_norm(s["text"]):
+                    continue
+                lines, q = _title_row_lines(spans, s, key, full)
+                if q != 2 or len(lines) < 2:
+                    continue
+                for n in spans:
+                    b = n["bbox"]
+                    if (n["text"].strip() == str(expected) and b[2] > s["bbox"][0]
+                            and any(not (b[3] < ln[1] - 4 or b[1] > ln[3] + 4) for ln in lines)):
+                        return p, title, expected, lines, n
+    return None
+
+
+def mutate_wrapped_row(doc, hit, orphan=False):
+    """접힌 행의 쪽번호를 지우고 ① +7 값으로 제자리 재스탬핑(M1w) 또는 ② 기대값 그대로
+    제목 마지막 줄 아랫줄 들여쓰기 자리에 재스탬핑(M1o — 고아 쪽번호)."""
+    p, _title, expected, lines, n = hit
+    page = doc[p]
+    r = fitz.Rect(n["bbox"])
+    page.add_redact_annot(r, fill=(1, 1, 1))
+    page.apply_redactions()
+    if orphan:
+        last = lines[-1]
+        h = last[3] - last[1]
+        pt = fitz.Point(lines[0][0], last[3] + 0.3 * h + n["size"] * 0.8)
+        page.insert_text(pt, str(expected), fontsize=n["size"], color=(0, 0, 0))
+    else:
+        page.insert_text(fitz.Point(r.x0, r.y1 - 1), str(expected + 7),
+                         fontsize=n["size"], color=(0, 0, 0))
+
+
 def mutate_tocmap_caption(doc, titles, ch_starts):
     """목차 면 첫 장 행의 제목~쪽번호 사이에 합성 썸네일 이미지 + y-정합 캡션 숫자를
     주입한다 — magazine $tocmap 이미지맵 오페어링(w7-b3)의 지면 등가물.
@@ -1103,6 +1156,29 @@ def main():
         a1, _ = g14a_toc_numbers(doc, titles, ch_starts)
         results["M1-toc-number"] = bool(a1)
         doc.close()
+
+        # M1w / M1o — 접힌 제목 행. 페어링이 연속행을 따라가는지(M1w)와, 쪽번호가
+        # 제목에서 떨어져 홀로 개행된 조판 결함을 값과 무관하게 잡는지(M1o)를 고정한다.
+        doc = fitz.open(book_dir / "draft" / "book.pdf")
+        hitw = _wrapped_toc_row(doc, titles, ch_starts)
+        doc.close()
+        if hitw:
+            for tag, orphan in (("M1w-wrapped-toc-number", False), ("M1o-orphan-toc-number", True)):
+                work = Path(td) / f"{tag}.pdf"
+                shutil.copy(book_dir / "draft" / "book.pdf", work)
+                doc = fitz.open(work)
+                mutate_wrapped_row(doc, hitw, orphan=orphan)
+                aw, _ = g14a_toc_numbers(doc, titles, ch_starts)
+                hitmsg = [m for m in aw if hitw[1][:16] in m
+                          and (not orphan or "고아 쪽번호" in m)]
+                # M1o는 원인 진단까지 고정한다 — 옆 칼럼·윗행 숫자와의 오페어링으로
+                # '인쇄 X ≠ 폴리오'가 나와도 FAIL은 FAIL이지만, 원인을 가리키지 못한다.
+                results[tag] = bool(hitmsg)
+                print(f"      ({tag.split('-')[0]} '{hitw[1][:12]}' {len(hitw[3])}줄 행 → "
+                      f"{hitmsg[0] if hitmsg else '검출 0건'})")
+                doc.close()
+        else:
+            print("      (M1w/M1o 건너뜀 — 목차에 접힌 장 제목 행 없음)")
 
         # M18 — M1과 반대 방향의 축: 주입이 **검출되면 안 된다**(캡션은 쪽번호가 아니다).
         # 수리 전 코드는 캡션 +7 값을 그 행의 쪽번호로 페어링해 오판 FAIL했다.

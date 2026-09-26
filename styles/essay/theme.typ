@@ -238,8 +238,10 @@
         set par(leading: 0.6em)
         v(14pt, weak: true)
         link(it.element.location(), {
-          it.body()
-          h(1fr)
+          // 어절 단위 개행 + 꼬리 결속(base.toc-words / base.toc-fill) — 쪽번호가 제목
+          // 마지막 줄에서 떨어져 다음 줄 왼쪽에 홀로 앉는 개행을 막는다.
+          base.toc-words(it.body())
+          base.toc-fill(gap: 3mm)
           text(font: t.sans-font, size: 9pt, fill: t.muted, it.page())
         })
       }

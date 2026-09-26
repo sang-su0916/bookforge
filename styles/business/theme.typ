@@ -1035,7 +1035,10 @@
     let toc-row(body, pnum, t-size, p-size, t-fill, p-fill, t-weight, t-font) = grid(
       columns: (1fr, 11mm), column-gutter: 3mm,
       align: (left + top, right + top),
-      text(font: t-font, size: t-size, weight: t-weight, tracking: -0.01em, fill: t-fill, body),
+      // 어절 단위 개행(base.toc-words) — 쪽번호는 별도 칸에서 첫 줄에 앉는다(리더 없는
+      // 그리드 관습). 구판은 음절 중간 개행("…알려주는 신 / 호다")이 났다.
+      text(font: t-font, size: t-size, weight: t-weight, tracking: -0.01em, fill: t-fill,
+        base.toc-words(body)),
       {
         // 쪽번호를 제목 베이스라인에 맞춰 내림(급수 차 보정)
         v((t-size - p-size) * 0.88)

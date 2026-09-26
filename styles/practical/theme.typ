@@ -315,21 +315,46 @@
 // 생기면 그때 파트 계층으로 복원한다 (구판의 "PART 01 + 책 제목 재출력" 결함 수리).
 // 행 계약: 급수 고정(장 9.5 / 절 8.5pt) — 자동 축소 금지. 넘치는 제목은 행잉
 // 인덴트로 줄바꿈하고 리더·쪽번호는 마지막 줄 끝에 앉는다(상업 목차 관행).
-// 한 행 안의 칩·제목·쪽번호는 같은 문단 흐름 = 단일 기준선.
+// 제목·리더·쪽번호는 같은 문단 흐름(쪽번호 = 마지막 줄 기준선), 칩은 왼쪽 칸에서
+// 제목 첫 줄 중심에 맞춘다. 개행은 어절 단위(toc-words — HTML 팩 keep-all과 동일).
 #let toc-band-h = 42mm
 #let toc-list-y = toc-band-h + 12mm
 #let toc-gutter = 11.8mm     // 2단 변형 거터
 #let toc-chip-w = 11.5mm
 
-// 점 리더 — 0.5pt 원점, 간격 2pt, rule
-#let toc-leader(pad) = box(width: 1fr, inset: (x: pad),
-  repeat(gap: 2pt, box(baseline: -0.85pt,
-    circle(radius: 0.33pt, fill: c-rule, stroke: none))))
+// 점 리더 — 0.5pt 원점, 간격 2pt, rule.
+// 행 꼬리 결속: [제목 마지막 어절]⁀[리더]⁀[쪽번호]는 한 덩어리다(⁀ = WJ U+2060).
+// 리더 박스와 쪽번호 박스 사이는 원래 개행 기회라, 제목 마지막 줄이 칼럼을 거의
+// 채우면 리더가 0폭으로 줄어들고 **쪽번호만 다음 줄 왼쪽**으로 떨어졌다(CC101
+// CH20 '나만의 AI 워크스페이스 설계' → '181' 단독 행, G14-A가 이웃 칼럼 숫자와 오페어링).
+// 결속하면 마지막 어절이 리더·쪽번호를 데리고 다음 줄로 내려가 쪽번호는 항상 제목
+// 마지막 줄 오른끝에 앉는다. 좌측 h(pad)는 리더가 0폭이 돼도 남는 최소 간격이다.
+#let toc-leader(pad) = {
+  sym.wj
+  h(pad)
+  sym.wj
+  box(width: 1fr, inset: (right: pad),
+    repeat(gap: 2pt, box(baseline: -0.85pt,
+      circle(radius: 0.33pt, fill: c-rule, stroke: none))))
+  sym.wj
+}
 
-// 장(H1) 항목 — [CH│NN 칩] 제목 … 쪽번호 (한 문단 = 한 기준선, 랩 허용)
-#let toc-ch-row(n, hd, t) = link(hd.location(),
-  par(hanging-indent: toc-chip-w + 3mm, leading: 0.55em, justify: false, spacing: 0pt, {
-    box(width: toc-chip-w, height: 4.7mm, fill: c-pale, radius: 1mm, baseline: 1.1mm,
+// 장(H1) 항목 — [CH│NN 칩] 제목 … 쪽번호
+// 칩은 문단 밖 왼쪽 칸에 둔다: 칩(4.7mm)이 문단 첫 줄 안에 있으면 줄 상자를 늘려
+// ① 칩이 제목 첫 줄보다 아래로 처지고(구판 baseline 1.1mm) ② 접힌 제목의 1→2행
+// 행송만 벌어졌다. 제목 칸 상단 여백 = (칩 높이 − 첫 줄 상자 높이)/2 — 실측이므로
+// 칩 중심과 제목 첫 줄(cap-height~baseline) 중심이 일치하고, 한 줄 행의 높이는
+// 칩 높이 그대로라 목차 행송·2단 분할 실측은 구판과 같은 축에서 움직인다. 같은
+// 여백을 아래에도 둬서 접힌 행의 마지막 줄 ↔ 첫 절 행 간격이 한 줄 행과 같다.
+#let toc-chip-h = 4.7mm
+#let toc-ch-row(n, hd, t) = link(hd.location(), {
+  let title-text(body) = text(font: TT.sans-font, size: 9.5pt, weight: "regular",
+    fill: t.ink, body)
+  let lead = (toc-chip-h - measure(title-text("가")).height) / 2
+  // 그리드는 블록 요소라 기본 블록 간격이 붙는다 — 문단(spacing: 0pt)이던 구판과
+  // 같은 행송을 지키려고 위아래 간격을 0으로 고정한다(행 간격은 group-block의 v()만).
+  block(above: 0pt, below: 0pt, grid(columns: (toc-chip-w, 1fr), column-gutter: 3mm,
+    box(width: toc-chip-w, height: toc-chip-h, fill: c-pale, radius: 1mm,
       align(center + horizon, text(font: TT.sans-font, size: 6.9pt, weight: "bold",
         fill: c-deep, tracking: 0.02em, number-width: "tabular", {
           // 구분자는 도형 rect — '│'(U+2502)는 Pretendard 미커버라 4번째 서체가 폴백 임베드됨
@@ -338,19 +363,21 @@
           box(baseline: 12%, rect(width: 0.6pt, height: 6.4pt, fill: c-deep.transparentize(35%)))
           h(1.4pt)
           numpad(n)
-        })))
-    h(3mm)
-    text(font: TT.sans-font, size: 9.5pt, weight: "regular", fill: t.ink, hd.body)
-    toc-leader(2mm)
-    box(text(font: TT.sans-font, size: 9.5pt, weight: "medium", fill: t.ink,
-      number-width: "tabular", str(counter(page).at(hd.location()).first())))
-  }))
+        }))),
+    pad(y: calc.max(lead, 0pt),
+      par(leading: 0.55em, justify: false, spacing: 0pt, {
+        title-text(toc-words(hd.body))
+        toc-leader(2mm)
+        box(text(font: TT.sans-font, size: 9.5pt, weight: "medium", fill: t.ink,
+          number-width: "tabular", str(counter(page).at(hd.location()).first())))
+      }))))
+})
 
-// 절(H2) 항목 — 들여쓰기 + 제목 … 쪽번호
+// 절(H2) 항목 — 들여쓰기 + 제목 … 쪽번호 (꼬리 결속은 장 행과 동일)
 #let toc-sub-row(hd, t) = link(hd.location(),
   par(hanging-indent: toc-chip-w + 3mm + 2mm, leading: 0.55em, justify: false, spacing: 0pt, {
     h(toc-chip-w + 3mm)
-    text(font: TT.sans-font, size: 8.5pt, weight: "light", fill: t.ink, hd.body)
+    text(font: TT.sans-font, size: 8.5pt, weight: "light", fill: t.ink, toc-words(hd.body))
     toc-leader(1.3mm)
     box(text(font: TT.sans-font, size: 8.5pt, weight: "light", fill: t.muted,
       number-width: "tabular", str(counter(page).at(hd.location()).first())))

@@ -39,6 +39,29 @@
   } else { it }
 }
 
+// ---- 목차 제목 어절 단위 개행 (typst 목차 행 공통) ---------------------------
+// HTML 팩 목차의 `word-break: keep-all`과 같은 규칙 — 어절 중간 개행 금지.
+// typst는 한글 음절 사이를 개행 기회로 보므로 접히는 목차 제목이 "신 / 호다"처럼
+// 어절 중간에서 끊겼다(business 외감백서 6장 실측). keep-words와 달리 **content**
+// (heading.body)를 받는다: 비공백 런을 box로 묶는 show 규칙이다. 12자를 넘는 런은
+// 12자 단위 박스로 쪼개져 박스 경계에서 개행된다 — 긴 무공백 토큰이 칼럼 밖으로
+// 넘치는 것(잘림과 같은 결함)보다 어절 중간 개행이 낫다.
+#let toc-words(body) = {
+  show regex("[^\s]{1,12}"): it => box(it)
+  body
+}
+
+// 리더 없는 목차 행의 꼬리 — [제목 마지막 어절]⁀[최소 간격]⁀[h(1fr)]⁀[쪽번호] (⁀ = WJ).
+// 제목 뒤 h(1fr) 바로 다음은 개행 기회라, 마지막 줄이 칼럼을 거의 채우면 쪽번호만
+// 다음 줄 **왼쪽 끝**에 홀로 떨어진다(typst 실측 — academic·essay 행 문법). 결속하면
+// 마지막 어절이 쪽번호를 데리고 내려가 쪽번호는 항상 제목 마지막 줄 오른끝에 앉는다.
+#let toc-fill(gap: 0pt) = {
+  sym.wj
+  if gap > 0pt { h(gap); sym.wj }
+  h(1fr)
+  sym.wj
+}
+
 // ---- full-bleed helper ------------------------------------------------------
 // Draws content covering the whole trim, ignoring page margins.
 #let full-bleed(t, body) = {

@@ -305,19 +305,24 @@
                 title: none, page-no: none,
                 size: 10pt, weight: "regular", above: 6pt, sticky: false) = block(
       width: 100%, above: above, below: 0pt, sticky: sticky,
-      {
-        set par(first-line-indent: 0em, hanging-indent: indent + 14mm,
-          leading: 16pt - size, spacing: 0pt, justify: false)
+      // 명시적 par(...) — 블록 안 인라인 내용은 `set par`만으로는 문단이 되지 않아
+      // hanging-indent가 적용되지 않았다(typst 0.12+): 접힌 제목의 되돌이 줄이 번호
+      // 칼럼을 무시하고 블록 왼쪽 끝(x=0)에서 시작했다(스모크 실측 '2.1 … / 요구사항').
+      par(first-line-indent: 0em, hanging-indent: indent + 14mm,
+          leading: 16pt - size, spacing: 0pt, justify: false, {
         if indent > 0mm { h(indent) }
         link(loc, box(width: 14mm, text(font: num-font, size: size, fill: num-fill,
           weight: weight, bottom-edge: "baseline",
           number-type: "lining", number-width: "tabular", num)))
-        link(loc, text(font: t.sans-font, size: size, weight: weight, fill: ink, title))
-        h(1fr)
+        // 어절 단위 개행 + 꼬리 결속(base.toc-words / base.toc-fill) — 쪽번호가 제목
+        // 마지막 줄에서 떨어져 다음 줄 왼쪽에 홀로 앉는 개행을 막는다.
+        link(loc, text(font: t.sans-font, size: size, weight: weight, fill: ink,
+          base.toc-words(title)))
+        base.toc-fill()
         link(loc, box(width: 9mm, align(right,
           text(font: t.body-font, size: size - 0.5pt, fill: ink, bottom-edge: "baseline",
             number-type: "lining", number-width: "tabular", page-no))))
-      })
+      }))
     page(
       header: none,
       numbering: "i",
