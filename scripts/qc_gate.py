@@ -913,7 +913,8 @@ def main():
             _src = _p.read_text(encoding="utf-8")
             _code += [m.group(2) for m in re.finditer(r"(?ms)^(```|~~~)[^\n]*\n(.*?)^\1[ \t]*$", _src)]
             _code += re.findall(r"`([^`\n]+)`", _src)
-    g15pr = g15_print_residue_check(page_texts, re.sub(r"\s+", "", "\u0001".join(_code)))
+    _code_text = re.sub(r"\s+", "", "\u0001".join(_code))
+    g15pr = g15_print_residue_check(page_texts, _code_text)
     report["gates"]["G15-PRINT"] = {"problems": g15pr, "ok": not g15pr}
     if g15pr:
         finish(book_dir, report, ["G15-PRINT: " + p for p in g15pr])
@@ -1235,6 +1236,15 @@ def main():
     # ---- G7-TAIL / G7-MID ----
     density = tokens.get("density") if isinstance(tokens.get("density"), dict) else {}
     density_report_only = bool(density.get("report_only"))
+    # 책 단위 예외 — 편집자가 "장마다 분량을 맞추지 않는다"고 결정한 책만. 사유 문장이 없으면
+    # 무시한다(예외가 조용히 퍼지지 않게). 사유는 리포트에 남는다. 스타일 단위 설정과 같은 효과.
+    _bd = raw_book.get("density") if isinstance(raw_book.get("density"), dict) else {}
+    if _bd.get("report_only") and str(_bd.get("reason") or "").strip():
+        density_report_only = True
+        report["density_override"] = {"scope": "book", "reason": str(_bd["reason"]).strip()}
+        report["warns"].append(f"DENSITY: 책 단위 report-only — 사유: {str(_bd['reason']).strip()[:80]}")
+    elif _bd.get("report_only"):
+        report["warns"].append("DENSITY: book.json density.report_only 에 reason 이 없어 무시함")
     tail_hard = TAIL_HARD.get(style, 0.45)
     tail_warn = TAIL_WARN.get(style, 0.70)
     mid_role_min = MID_ROLE_MIN.get(style, 0.90)
@@ -1297,7 +1307,9 @@ def main():
             if len(tail_reaches) >= 3 else min(tail_reaches)
         ok = med >= 0.80 and p10 >= 0.55
         report["gates"]["G7-DOC"] = {"median": med, "p10": p10, "ok": ok}
-        if not ok:
+        if not ok and density_report_only:
+            report["warns"].append(f"G7-DOC: 꼬리 reach 중앙값 {med}/p10 {p10} < 0.80/0.55 (report-only)")
+        elif not ok:
             fails.append(f"G7-DOC: 꼬리 reach 중앙값 {med}/p10 {p10} < 0.80/0.55 — 원고 분량 설계 반환")
 
     # 본문 크기 = 글자 수 가중 최빈값(행 수 기준이면 리스트·표 9pt가 본문 10.5pt를 이길 수 있다)
@@ -1391,8 +1403,12 @@ def main():
     for _i, _raw in enumerate(page_texts):
         #    URL도 뺀다 — 참고문헌은 같은 사이트 주소 앞부분(https://help.openai.com/en/articles/)을
         #    줄마다 공유해 44자 반복으로 FAIL 됐다(GPTs 가이드 p68 실측 오탐).
+        #    원고 코드 블록에 그대로 있는 줄도 뺀다 — hooks JSON·YAML·CLI 예시는 원래 같은 틀이
+        #    반복된다(CC101 p83·p151·p205 등 실측 오탐). 짧은 줄(6자 미만)은 우연 일치라 남긴다.
         _s_lines = [re.sub(r"https?://\S+", "", l) for l in _raw.split("\n")
-                    if not l.strip().startswith("자료:")]
+                    if not l.strip().startswith("자료:")
+                    and not (_code_text and len(re.sub(r"\s+", "", l)) >= 6
+                             and re.sub(r"\s+", "", l) in _code_text)]
         _s = "\n".join(_s_lines)
         _s = re.sub(r"\s+", "", _s)
         _s = re.sub(r"[_]{2,}|\[[^\]]{1,12}\]|[□▮☐]+", "", _s)

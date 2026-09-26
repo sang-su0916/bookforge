@@ -208,6 +208,7 @@ v2 PDF에는 첫 면과 마지막 면을 의도적으로 설계한다. 사용자
 - `brand`는 본문·도해의 고대비 네이비, `accent`는 장식·강조용 골드로 분리한다. `brand_default`와 도해 팔레트 0번은 같은 네이비를 사용한다.
 - `layout_profile: "lbiz-editorial-branded"`는 사용자가 제공한 LBiz 브랜디드 백서 계열을 선택한다. A5 아이보리 지면, 좌측 정렬 표지, 상단 좌측 로고·워드마크, 골드 라벨·밑줄, 장 시작 일러스트, 하단 연락·저작권 푸터를 사용한다. 기존 다크 `business` 템플릿과 중앙정렬형 실험 프로필은 별도 프로필로 보존한다.
 - `publisher`, `author`, `series`, `series_no`, `slogan`, `imprint`, `disclaimer`는 표지·판권면에 실제로 렌더되는 메타데이터다. 연락처는 책 프로젝트에서 명시한 경우에만 노출한다.
+- `density: {"report_only": true, "reason": "…"}`는 장 끝·중간 면 여백 판정을 이 책에서만 리포트로 돌리는 편집 예외다(사유 필수, 행수 하한 6행은 그대로 HARD). 기준은 [references/pagination.md](references/pagination.md) §4.
 - 수정본은 `output_slug`로 최종 파일명을 고정하며, 기존 v1 파일을 삭제하거나 덮어쓰지 않는다.
 
 ## P0 — 계약
